@@ -1,0 +1,88 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Player {
+  id            String   @id @default(cuid())
+  username      String   @unique
+  avatar        String   @default("🦁")
+  level         Int      @default(1)
+  xp            Int      @default(0)
+  coins         Int      @default(100)
+  gems          Int      @default(5)
+  totalScore    Int      @default(0)
+  gamesPlayed   Int      @default(0)
+  gamesWon      Int      @default(0)
+  currentStreak Int      @default(0)
+  bestStreak    Int      @default(0)
+  teamId        String?
+  team          Team?    @relation(fields: [teamId], references: [id])
+  achievements  PlayerAchievement[]
+  dailyChallenges DailyChallenge[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Team {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  logo        String   @default("⚔️")
+  description String   @default("")
+  totalScore  Int      @default(0)
+  members     Player[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Achievement {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String
+  description String
+  icon        String
+  category    String
+  requirement Int      @default(1)
+  players     PlayerAchievement[]
+}
+
+model PlayerAchievement {
+  id            String      @id @default(cuid())
+  playerId      String
+  achievementId String
+  player        Player      @relation(fields: [playerId], references: [id])
+  achievement   Achievement @relation(fields: [achievementId], references: [id])
+  unlockedAt    DateTime    @default(now())
+
+  @@unique([playerId, achievementId])
+}
+
+model DailyChallenge {
+  id          String   @id @default(cuid())
+  playerId    String
+  player      Player   @relation(fields: [playerId], references: [id])
+  day         String
+  score       Int      @default(0)
+  completed   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@unique([playerId, day])
+}
+
+model GameSession {
+  id          String   @id @default(cuid())
+  playerId    String
+  mode        String
+  category    String
+  score       Int      @default(0)
+  correctCount Int     @default(0)
+  totalCount  Int      @default(0)
+  xpEarned    Int      @default(0)
+  coinsEarned Int      @default(0)
+  duration    Int      @default(0)
+  createdAt   DateTime @default(now())
+}

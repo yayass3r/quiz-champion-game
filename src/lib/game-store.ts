@@ -1,0 +1,619 @@
+'use client';
+
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+import { Question, QuestionCategory, getQuestions, getRandomQuestions, getSurvivalQuestions, categoryInfo } from './questions';
+
+// ===== Types =====
+export type GameMode = 'classic' | 'speed' | 'survival' | 'marathon' | 'daily' | 'teamBattle';
+export type GameScreen =
+  | 'splash'
+  | 'menu'
+  | 'modeSelect'
+  | 'categorySelect'
+  | 'teamSelect'
+  | 'gameplay'
+  | 'results'
+  | 'leaderboard'
+  | 'profile'
+  | 'shop'
+  | 'achievements'
+  | 'team'
+  | 'dailyChallenge'
+  | 'settings'
+  | 'spinWheel';
+
+export interface PowerUp {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  count: number;
+  cost: number;
+}
+
+export interface Achievement {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  unlocked: boolean;
+  progress: number;
+  target: number;
+  reward: number;
+}
+
+export interface ShopItem {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  cost: number;
+  currency: 'coins' | 'gems';
+  type: 'avatar' | 'theme' | 'powerup' | 'badge';
+  owned: boolean;
+}
+
+export interface TeamData {
+  id: string;
+  name: string;
+  logo: string;
+  members: number;
+  score: number;
+  rank: number;
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  name: string;
+  avatar: string;
+  score: number;
+  level: number;
+  isPlayer: boolean;
+}
+
+export interface GameState {
+  // Navigation
+  currentScreen: GameScreen;
+  previousScreen: GameScreen | null;
+
+  // Player Data
+  playerName: string;
+  playerAvatar: string;
+  playerLevel: number;
+  playerXP: number;
+  playerCoins: number;
+  playerGems: number;
+  totalScore: number;
+  gamesPlayed: number;
+  gamesWon: number;
+  currentStreak: number;
+  bestStreak: number;
+
+  // Game Session
+  currentMode: GameMode;
+  currentCategory: QuestionCategory | null;
+  questions: Question[];
+  currentQuestionIndex: number;
+  score: number;
+  correctCount: number;
+  timeRemaining: number;
+  isTimerActive: boolean;
+  answeredCurrent: boolean;
+  selectedAnswer: number | null;
+  isCorrect: boolean | null;
+  comboCount: number;
+  maxCombo: number;
+  usedPowerUps: string[];
+
+  // Power-ups
+  powerUps: PowerUp[];
+
+  // Team
+  currentTeam: TeamData | null;
+  teams: TeamData[];
+
+  // Leaderboard
+  leaderboard: LeaderboardEntry[];
+
+  // Achievements
+  achievements: Achievement[];
+
+  // Shop
+  shopItems: ShopItem[];
+
+  // Daily Challenge
+  dailyCompleted: boolean;
+  dailyScore: number;
+  lastDailyDate: string;
+
+  // Sound & Vibration
+  soundEnabled: boolean;
+  vibrationEnabled: boolean;
+  darkMode: boolean;
+
+  // Actions
+  setScreen: (screen: GameScreen) => void;
+  goBack: () => void;
+  startGame: (mode: GameMode, category?: QuestionCategory) => void;
+  answerQuestion: (answerIndex: number) => void;
+  nextQuestion: () => void;
+  usePowerUp: (powerUpId: string) => void;
+  endGame: () => void;
+  resetGame: () => void;
+  setPlayerName: (name: string) => void;
+  setPlayerAvatar: (avatar: string) => void;
+  toggleSound: () => void;
+  toggleVibration: () => void;
+  toggleDarkMode: () => void;
+  buyShopItem: (itemId: string) => void;
+  joinTeam: (team: TeamData) => void;
+  createTeam: (name: string, logo: string) => void;
+  checkAchievements: () => void;
+}
+
+const initialPowerUps: PowerUp[] = [
+  { id: 'fifty_fifty', name: 'حذف نصف الإجابات', icon: '✂️', description: 'يحذف إجابتين خاطئتين', count: 3, cost: 50 },
+  { id: 'freeze_time', name: 'تجميد الوقت', icon: '⏸️', description: 'يوقف المؤقت لمدة 10 ثوان', count: 2, cost: 75 },
+  { id: 'double_points', name: 'مضاعفة النقاط', icon: '✨', description: 'يضاعف نقاط السؤال الحالي', count: 2, cost: 100 },
+  { id: 'hint', name: 'تلميح', icon: '💡', description: 'يكشف تلميحاً عن الإجابة الصحيحة', count: 3, cost: 30 },
+  { id: 'skip', name: 'تخطي السؤال', icon: '⏭️', description: 'يتخطى السؤال بدون خسارة', count: 2, cost: 60 },
+  { id: 'shield', name: 'درع الحماية', icon: '🛡️', description: 'يمنحك فرصة ثانية عند الخطأ', count: 1, cost: 150 },
+];
+
+const initialAchievements: Achievement[] = [
+  { id: 'first_win', name: 'البداية', description: 'أكمل أول لعبة', icon: '🌟', unlocked: false, progress: 0, target: 1, reward: 50 },
+  { id: 'streak_5', name: 'رامي محترف', description: 'حقق سلسلة 5 إجابات صحيحة', icon: '🔥', unlocked: false, progress: 0, target: 5, reward: 100 },
+  { id: 'streak_10', name: 'بطل الأسئلة', description: 'حقق سلسلة 10 إجابات صحيحة', icon: '💎', unlocked: false, progress: 0, target: 10, reward: 200 },
+  { id: 'streak_20', name: 'الأسطورة', description: 'حقق سلسلة 20 إجابة صحيحة', icon: '👑', unlocked: false, progress: 0, target: 20, reward: 500 },
+  { id: 'games_10', name: 'لاعب نشيط', description: 'العب 10 ألعاب', icon: '🎮', unlocked: false, progress: 0, target: 10, reward: 100 },
+  { id: 'games_50', name: 'مدمن الألعاب', description: 'العب 50 لعبة', icon: '🏆', unlocked: false, progress: 0, target: 50, reward: 300 },
+  { id: 'score_1000', name: 'ألف نقطة', description: 'اجمع 1000 نقطة', icon: '💰', unlocked: false, progress: 0, target: 1000, reward: 150 },
+  { id: 'score_5000', name: 'خبير الأسئلة', description: 'اجمع 5000 نقطة', icon: '🎓', unlocked: false, progress: 0, target: 5000, reward: 300 },
+  { id: 'level_5', name: 'صاعد', description: 'صل للمستوى 5', icon: '⬆️', unlocked: false, progress: 0, target: 5, reward: 100 },
+  { id: 'level_10', name: 'محترف', description: 'صل للمستوى 10', icon: '🏅', unlocked: false, progress: 0, target: 10, reward: 250 },
+  { id: 'daily_7', name: 'متحدي أسبوعي', description: 'أكمل التحدي اليومي 7 أيام متتالية', icon: '📅', unlocked: false, progress: 0, target: 7, reward: 200 },
+  { id: 'survival_10', name: 'الناجي', description: 'أجب على 10 أسئلة في وضع البقاء', icon: '🏕️', unlocked: false, progress: 0, target: 10, reward: 200 },
+  { id: 'all_categories', name: 'موسوعة', description: 'العب في جميع التصنيفات', icon: '📖', unlocked: false, progress: 0, target: 10, reward: 300 },
+  { id: 'perfect_game', name: 'لعبة مثالية', description: 'أجب على جميع الأسئلة بشكل صحيح', icon: '💯', unlocked: false, progress: 0, target: 1, reward: 500 },
+  { id: 'speed_demon', name: 'شيطان السرعة', description: 'أجب على سؤال في أقل من 3 ثوان', icon: '⚡', unlocked: false, progress: 0, target: 1, reward: 150 },
+];
+
+const initialShopItems: ShopItem[] = [
+  { id: 'avatar_lion', name: 'أسد', icon: '🦁', description: 'أفاتار الأسد', cost: 100, currency: 'coins', type: 'avatar', owned: false },
+  { id: 'avatar_eagle', name: 'نسر', icon: '🦅', description: 'أفاتار النسر', cost: 100, currency: 'coins', type: 'avatar', owned: false },
+  { id: 'avatar_dragon', name: 'تنين', icon: '🐉', description: 'أفاتار التنين', cost: 200, currency: 'coins', type: 'avatar', owned: false },
+  { id: 'avatar_phoenix', name: 'عنقاء', icon: '🔥', description: 'أفاتار العنقاء', cost: 300, currency: 'coins', type: 'avatar', owned: false },
+  { id: 'avatar_crown', name: 'تاج', icon: '👑', description: 'أفاتار التاج', cost: 5, currency: 'gems', type: 'avatar', owned: false },
+  { id: 'avatar_diamond', name: 'ألماس', icon: '💎', description: 'أفاتار الألماس', cost: 10, currency: 'gems', type: 'avatar', owned: false },
+  { id: 'pu_fifty', name: 'حذف نصف الإجابات ×3', icon: '✂️', description: '3 استخدامات', cost: 50, currency: 'coins', type: 'powerup', owned: false },
+  { id: 'pu_freeze', name: 'تجميد الوقت ×2', icon: '⏸️', description: '2 استخدامات', cost: 75, currency: 'coins', type: 'powerup', owned: false },
+  { id: 'pu_double', name: 'مضاعفة النقاط ×2', icon: '✨', description: '2 استخدامات', cost: 100, currency: 'coins', type: 'powerup', owned: false },
+  { id: 'pu_shield', name: 'درع الحماية ×1', icon: '🛡️', description: '1 استخدام', cost: 150, currency: 'coins', type: 'powerup', owned: false },
+  { id: 'pu_hint', name: 'تلميح ×3', icon: '💡', description: '3 استخدامات', cost: 30, currency: 'coins', type: 'powerup', owned: false },
+  { id: 'pu_skip', name: 'تخطي ×2', icon: '⏭️', description: '2 استخدامات', cost: 60, currency: 'coins', type: 'powerup', owned: false },
+];
+
+const initialTeams: TeamData[] = [
+  { id: '1', name: 'فرسان المعرفة', logo: '⚔️', members: 156, score: 45230, rank: 1 },
+  { id: '2', name: 'أسياد الذكاء', logo: '🧠', members: 132, score: 42100, rank: 2 },
+  { id: '3', name: 'محاربو الفكر', logo: '🏹', members: 98, score: 38750, rank: 3 },
+  { id: '4', name: 'عباقرة العرب', logo: '🌟', members: 210, score: 35200, rank: 4 },
+  { id: '5', name: 'نسور العلوم', logo: '🦅', members: 87, score: 31800, rank: 5 },
+  { id: '6', name: 'صولجان المعرفة', logo: '👑', members: 145, score: 29400, rank: 6 },
+  { id: '7', name: 'شعلات الفكر', logo: '🔥', members: 67, score: 25600, rank: 7 },
+  { id: '8', name: 'أقمار الحكمة', logo: '🌙', members: 93, score: 22100, rank: 8 },
+];
+
+const initialLeaderboard: LeaderboardEntry[] = [
+  { rank: 1, name: 'سارة المحمد', avatar: '🦅', score: 12500, level: 28, isPlayer: false },
+  { rank: 2, name: 'أحمد الخالدي', avatar: '🐉', score: 11200, level: 25, isPlayer: false },
+  { rank: 3, name: 'فاطمة العلي', avatar: '👑', score: 10800, level: 24, isPlayer: false },
+  { rank: 4, name: 'عمر السعيد', avatar: '🦁', score: 9600, level: 22, isPlayer: false },
+  { rank: 5, name: 'نورة الحربي', avatar: '💎', score: 8900, level: 20, isPlayer: false },
+  { rank: 6, name: 'خالد العمري', avatar: '🔥', score: 8200, level: 19, isPlayer: false },
+  { rank: 7, name: 'مريم الشريف', avatar: '🌟', score: 7500, level: 18, isPlayer: false },
+  { rank: 8, name: 'يوسف القحطاني', avatar: '⚔️', score: 6800, level: 16, isPlayer: false },
+  { rank: 9, name: 'ليلى النعيمي', avatar: '🌙', score: 6100, level: 15, isPlayer: false },
+  { rank: 10, name: 'أنت', avatar: '🦁', score: 0, level: 1, isPlayer: true },
+];
+
+function getXPForLevel(level: number): number {
+  return level * 200;
+}
+
+export const useGameStore = create<GameState>()(
+  persist(
+    (set, get) => ({
+      // Navigation
+      currentScreen: 'splash',
+      previousScreen: null,
+
+      // Player Data
+      playerName: 'لاعب',
+      playerAvatar: '🦁',
+      playerLevel: 1,
+      playerXP: 0,
+      playerCoins: 100,
+      playerGems: 5,
+      totalScore: 0,
+      gamesPlayed: 0,
+      gamesWon: 0,
+      currentStreak: 0,
+      bestStreak: 0,
+
+      // Game Session
+      currentMode: 'classic',
+      currentCategory: null,
+      questions: [],
+      currentQuestionIndex: 0,
+      score: 0,
+      correctCount: 0,
+      timeRemaining: 0,
+      isTimerActive: false,
+      answeredCurrent: false,
+      selectedAnswer: null,
+      isCorrect: null,
+      comboCount: 0,
+      maxCombo: 0,
+      usedPowerUps: [],
+
+      // Power-ups
+      powerUps: initialPowerUps,
+
+      // Team
+      currentTeam: null,
+      teams: initialTeams,
+
+      // Leaderboard
+      leaderboard: initialLeaderboard,
+
+      // Achievements
+      achievements: initialAchievements,
+
+      // Shop
+      shopItems: initialShopItems,
+
+      // Daily Challenge
+      dailyCompleted: false,
+      dailyScore: 0,
+      lastDailyDate: '',
+
+      // Settings
+      soundEnabled: true,
+      vibrationEnabled: true,
+      darkMode: false,
+
+      // ===== Actions =====
+      setScreen: (screen) => set((state) => ({
+        previousScreen: state.currentScreen,
+        currentScreen: screen,
+      })),
+
+      goBack: () => set((state) => ({
+        currentScreen: state.previousScreen || 'menu',
+        previousScreen: null,
+      })),
+
+      startGame: (mode, category) => {
+        let gameQuestions: Question[] = [];
+        let timePerQuestion = 20;
+
+        switch (mode) {
+          case 'classic':
+            gameQuestions = category ? getQuestions(category, undefined, 10) : getRandomQuestions(10);
+            timePerQuestion = 20;
+            break;
+          case 'speed':
+            gameQuestions = category ? getQuestions(category, 'easy', 15) : getQuestions(undefined, 'easy', 15);
+            timePerQuestion = 8;
+            break;
+          case 'survival':
+            gameQuestions = getSurvivalQuestions(20);
+            timePerQuestion = 15;
+            break;
+          case 'marathon':
+            gameQuestions = getRandomQuestions(30);
+            timePerQuestion = 30;
+            break;
+          case 'daily':
+            gameQuestions = getRandomQuestions(10);
+            timePerQuestion = 20;
+            break;
+          case 'teamBattle':
+            gameQuestions = getRandomQuestions(15);
+            timePerQuestion = 15;
+            break;
+        }
+
+        set({
+          currentMode: mode,
+          currentCategory: category || null,
+          questions: gameQuestions,
+          currentQuestionIndex: 0,
+          score: 0,
+          correctCount: 0,
+          timeRemaining: timePerQuestion,
+          isTimerActive: true,
+          answeredCurrent: false,
+          selectedAnswer: null,
+          isCorrect: null,
+          comboCount: 0,
+          maxCombo: 0,
+          usedPowerUps: [],
+          currentScreen: 'gameplay',
+        });
+      },
+
+      answerQuestion: (answerIndex) => {
+        const state = get();
+        if (state.answeredCurrent) return;
+
+        const currentQuestion = state.questions[state.currentQuestionIndex];
+        if (!currentQuestion) return;
+
+        const correct = answerIndex === currentQuestion.correctIndex;
+        const points = correct ? currentQuestion.points * (1 + Math.floor(state.comboCount / 3) * 0.5) : 0;
+        const comboIncrement = correct ? 1 : 0;
+
+        set({
+          answeredCurrent: true,
+          selectedAnswer: answerIndex,
+          isCorrect: correct,
+          isTimerActive: false,
+          score: state.score + Math.round(points),
+          correctCount: state.correctCount + (correct ? 1 : 0),
+          comboCount: correct ? state.comboCount + 1 : 0,
+          maxCombo: Math.max(state.maxCombo, correct ? state.comboCount + 1 : state.maxCombo),
+          currentStreak: correct ? state.currentStreak + 1 : 0,
+          bestStreak: Math.max(state.bestStreak, correct ? state.currentStreak + 1 : state.bestStreak),
+        });
+      },
+
+      nextQuestion: () => {
+        const state = get();
+        const nextIndex = state.currentQuestionIndex + 1;
+        const isLastQuestion = nextIndex >= state.questions.length;
+
+        if (isLastQuestion) {
+          // Game ended naturally
+          get().endGame();
+          return;
+        }
+
+        const nextQuestion = state.questions[nextIndex];
+        let timeLimit = nextQuestion.timeLimit;
+
+        if (state.currentMode === 'speed') timeLimit = 8;
+        if (state.currentMode === 'survival' && !state.isCorrect) {
+          // In survival mode, wrong answer = game over
+          get().endGame();
+          return;
+        }
+
+        set({
+          currentQuestionIndex: nextIndex,
+          answeredCurrent: false,
+          selectedAnswer: null,
+          isCorrect: null,
+          timeRemaining: timeLimit,
+          isTimerActive: true,
+          usedPowerUps: [],
+        });
+      },
+
+      usePowerUp: (powerUpId) => {
+        const state = get();
+        if (state.answeredCurrent) return;
+
+        const powerUp = state.powerUps.find(p => p.id === powerUpId);
+        if (!powerUp || powerUp.count <= 0) return;
+
+        const newPowerUps = state.powerUps.map(p =>
+          p.id === powerUpId ? { ...p, count: p.count - 1 } : p
+        );
+
+        set({
+          powerUps: newPowerUps,
+          usedPowerUps: [...state.usedPowerUps, powerUpId],
+        });
+
+        // Apply power-up effects
+        if (powerUpId === 'freeze_time') {
+          set({ isTimerActive: false });
+          setTimeout(() => {
+            set({ isTimerActive: true });
+          }, 10000);
+        }
+      },
+
+      endGame: () => {
+        const state = get();
+        const xpEarned = Math.round(state.score * 0.5);
+        const coinsEarned = Math.round(state.score * 0.1) + (state.correctCount * 5);
+        const gemsEarned = state.correctCount === state.questions.length ? 3 : 0;
+        const newXP = state.playerXP + xpEarned;
+        const newLevel = Math.floor(newXP / getXPForLevel(state.playerLevel)) + 1;
+        const isWon = state.correctCount >= Math.ceil(state.questions.length * 0.6);
+
+        // Update leaderboard
+        const newLeaderboard = [...state.leaderboard];
+        const playerIndex = newLeaderboard.findIndex(e => e.isPlayer);
+        if (playerIndex >= 0) {
+          newLeaderboard[playerIndex] = {
+            ...newLeaderboard[playerIndex],
+            score: state.totalScore + state.score,
+            level: newLevel,
+            avatar: state.playerAvatar,
+            name: state.playerName,
+          };
+          newLeaderboard.sort((a, b) => b.score - a.score);
+          newLeaderboard.forEach((entry, i) => entry.rank = i + 1);
+        }
+
+        set({
+          currentScreen: 'results',
+          isTimerActive: false,
+          playerLevel: Math.max(state.playerLevel, newLevel),
+          playerXP: newXP,
+          playerCoins: state.playerCoins + coinsEarned,
+          playerGems: state.playerGems + gemsEarned,
+          totalScore: state.totalScore + state.score,
+          gamesPlayed: state.gamesPlayed + 1,
+          gamesWon: state.gamesWon + (isWon ? 1 : 0),
+          leaderboard: newLeaderboard,
+        });
+
+        get().checkAchievements();
+      },
+
+      resetGame: () => set({
+        currentScreen: 'menu',
+        currentMode: 'classic',
+        currentCategory: null,
+        questions: [],
+        currentQuestionIndex: 0,
+        score: 0,
+        correctCount: 0,
+        timeRemaining: 0,
+        isTimerActive: false,
+        answeredCurrent: false,
+        selectedAnswer: null,
+        isCorrect: null,
+        comboCount: 0,
+        maxCombo: 0,
+        usedPowerUps: [],
+      }),
+
+      setPlayerName: (name) => set({ playerName: name }),
+      setPlayerAvatar: (avatar) => set({ playerAvatar: avatar }),
+      toggleSound: () => set((s) => ({ soundEnabled: !s.soundEnabled })),
+      toggleVibration: () => set((s) => ({ vibrationEnabled: !s.vibrationEnabled })),
+      toggleDarkMode: () => set((s) => ({ darkMode: !s.darkMode })),
+
+      buyShopItem: (itemId) => {
+        const state = get();
+        const item = state.shopItems.find(i => i.id === itemId);
+        if (!item || item.owned) return;
+
+        const canAfford = item.currency === 'coins'
+          ? state.playerCoins >= item.cost
+          : state.playerGems >= item.cost;
+
+        if (!canAfford) return;
+
+        const newShopItems = state.shopItems.map(i =>
+          i.id === itemId ? { ...i, owned: true } : i
+        );
+
+        if (item.type === 'avatar') {
+          const avatarIcon = item.icon;
+          set({
+            shopItems: newShopItems,
+            playerAvatar: avatarIcon,
+            playerCoins: item.currency === 'coins' ? state.playerCoins - item.cost : state.playerCoins,
+            playerGems: item.currency === 'gems' ? state.playerGems - item.cost : state.playerGems,
+          });
+        } else if (item.type === 'powerup') {
+          const puMap: Record<string, string> = {
+            'pu_fifty': 'fifty_fifty',
+            'pu_freeze': 'freeze_time',
+            'pu_double': 'double_points',
+            'pu_shield': 'shield',
+            'pu_hint': 'hint',
+            'pu_skip': 'skip',
+          };
+          const puId = puMap[itemId];
+          const newPowerUps = state.powerUps.map(p =>
+            p.id === puId ? { ...p, count: p.count + (puId === 'shield' ? 1 : 3) } : p
+          );
+          set({
+            shopItems: newShopItems,
+            powerUps: newPowerUps,
+            playerCoins: item.currency === 'coins' ? state.playerCoins - item.cost : state.playerCoins,
+            playerGems: item.currency === 'gems' ? state.playerGems - item.cost : state.playerGems,
+          });
+        }
+      },
+
+      joinTeam: (team) => set({ currentTeam: team }),
+      createTeam: (name, logo) => {
+        const newTeam: TeamData = {
+          id: Date.now().toString(),
+          name,
+          logo,
+          members: 1,
+          score: 0,
+          rank: 9,
+        };
+        set((state) => ({
+          currentTeam: newTeam,
+          teams: [...state.teams, newTeam],
+        }));
+      },
+
+      checkAchievements: () => {
+        const state = get();
+        const newAchievements = state.achievements.map(a => {
+          let progress = a.progress;
+          switch (a.id) {
+            case 'first_win': progress = state.gamesPlayed >= 1 ? 1 : 0; break;
+            case 'streak_5': progress = state.bestStreak; break;
+            case 'streak_10': progress = state.bestStreak; break;
+            case 'streak_20': progress = state.bestStreak; break;
+            case 'games_10': progress = state.gamesPlayed; break;
+            case 'games_50': progress = state.gamesPlayed; break;
+            case 'score_1000': progress = state.totalScore; break;
+            case 'score_5000': progress = state.totalScore; break;
+            case 'level_5': progress = state.playerLevel; break;
+            case 'level_10': progress = state.playerLevel; break;
+          }
+          const newlyUnlocked = !a.unlocked && progress >= a.target;
+          if (newlyUnlocked) {
+            // Award coins
+            set((s) => ({ playerCoins: s.playerCoins + a.reward }));
+          }
+          return { ...a, progress, unlocked: a.unlocked || progress >= a.target };
+        });
+        set({ achievements: newAchievements });
+      },
+
+      // Timer reducer
+      tick: () => set((state) => {
+        if (!state.isTimerActive || state.timeRemaining <= 0) return {};
+        const newTime = state.timeRemaining - 1;
+        if (newTime <= 0) {
+          return { timeRemaining: 0, isTimerActive: false, answeredCurrent: true, isCorrect: false, selectedAnswer: -1 };
+        }
+        return { timeRemaining: newTime };
+      }),
+    }),
+    {
+      name: 'quiz-champion-game',
+      partialize: (state) => ({
+        playerName: state.playerName,
+        playerAvatar: state.playerAvatar,
+        playerLevel: state.playerLevel,
+        playerXP: state.playerXP,
+        playerCoins: state.playerCoins,
+        playerGems: state.playerGems,
+        totalScore: state.totalScore,
+        gamesPlayed: state.gamesPlayed,
+        gamesWon: state.gamesWon,
+        currentStreak: state.currentStreak,
+        bestStreak: state.bestStreak,
+        powerUps: state.powerUps,
+        currentTeam: state.currentTeam,
+        leaderboard: state.leaderboard,
+        achievements: state.achievements,
+        shopItems: state.shopItems,
+        dailyCompleted: state.dailyCompleted,
+        dailyScore: state.dailyScore,
+        lastDailyDate: state.lastDailyDate,
+        soundEnabled: state.soundEnabled,
+        vibrationEnabled: state.vibrationEnabled,
+        darkMode: state.darkMode,
+      }),
+    }
+  )
+);

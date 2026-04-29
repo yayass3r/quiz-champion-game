@@ -1,0 +1,10 @@
+node_modules/
+.next/
+.env
+.env.local
+*.log
+db/
+download/
+research_*.json
+.zscripts/
+dev.log

@@ -18,6 +18,11 @@ export interface LocalUser {
   createdAt: string;
   lastBonusDate?: string;
   lastLoginDate?: string;
+  banned?: boolean;
+  bannedReason?: string;
+  lastActive?: string;
+  gamesPlayed?: number;
+  totalScore?: number;
 }
 
 interface AuthState {
@@ -39,6 +44,10 @@ interface AuthState {
   addCoins: (amount: number) => void;
   addGems: (amount: number) => void;
   claimDailyBonus: () => { claimed: boolean; bonus: number };
+  deleteUser: (userId: string) => { success: boolean; error?: string };
+  banUser: (userId: string, reason: string) => { success: boolean; error?: string };
+  unbanUser: (userId: string) => { success: boolean; error?: string };
+  getAllUsersIncludingAdmin: () => LocalUser[];
 }
 
 // Simple hash for password (not cryptographically secure, but works for local storage)
@@ -128,6 +137,10 @@ export const useAuthStore = create<AuthState>()(
         const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
         if (!user) {
           return { success: false, error: 'لا يوجد حساب بهذا البريد الإلكتروني' };
+        }
+
+        if (user.banned) {
+          return { success: false, error: `هذا الحساب محظور${user.bannedReason ? ': ' + user.bannedReason : ''}` };
         }
 
         if (user.password !== simpleHash(password)) {
@@ -258,6 +271,44 @@ export const useAuthStore = create<AuthState>()(
         const updatedUsers = users.map(u => u.id === currentUser.id ? { ...u, coins: u.coins + bonus, lastBonusDate: today, lastLoginDate: today } : u);
         set({ currentUser: updatedUser, users: updatedUsers });
         return { claimed: true, bonus };
+      },
+
+      deleteUser: (userId) => {
+        const { users, currentUser } = get();
+        // Prevent deleting self or admin
+        const targetUser = users.find(u => u.id === userId);
+        if (!targetUser) return { success: false, error: 'المستخدم غير موجود' };
+        if (targetUser.role === 'admin') return { success: false, error: 'لا يمكن حذف حساب المسؤول' };
+        if (currentUser?.id === userId) return { success: false, error: 'لا يمكنك حذف حسابك' };
+
+        set({ users: users.filter(u => u.id !== userId) });
+        return { success: true };
+      },
+
+      banUser: (userId, reason) => {
+        const { users } = get();
+        const targetUser = users.find(u => u.id === userId);
+        if (!targetUser) return { success: false, error: 'المستخدم غير موجود' };
+        if (targetUser.role === 'admin') return { success: false, error: 'لا يمكنك حظر مسؤول' };
+
+        const updatedUsers = users.map(u =>
+          u.id === userId ? { ...u, banned: true, bannedReason: reason } : u
+        );
+        set({ users: updatedUsers });
+        return { success: true };
+      },
+
+      unbanUser: (userId) => {
+        const { users } = get();
+        const updatedUsers = users.map(u =>
+          u.id === userId ? { ...u, banned: false, bannedReason: '' } : u
+        );
+        set({ users: updatedUsers });
+        return { success: true };
+      },
+
+      getAllUsersIncludingAdmin: () => {
+        return get().users;
       },
     }),
     {

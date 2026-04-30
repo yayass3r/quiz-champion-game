@@ -56,6 +56,15 @@ export interface AdConfig {
   adType: string; isEnabled: boolean; frequency: number; position: string;
 }
 
+export interface Announcement {
+  id: string; title: string; message: string; type: 'info' | 'warning' | 'reward'; createdAt: string; isActive: boolean;
+}
+
+export interface AdminSettings {
+  welcomeCoins: number; welcomeGems: number; dailyBonusCoins: number; transferFeeCoins: number; transferFeeGems: number;
+  minTransferAmount: number; coinRewardPerGame: number; gemRewardPerfect: number; xpMultiplier: number;
+}
+
 export interface AuthUser {
   id: string; email: string; name: string; avatar: string; role: string; level: number; coins: number; gems: number;
 }
@@ -80,6 +89,8 @@ export interface GameState {
   authToken: string | null;
   // Admin
   packages: PackageData[]; adConfigs: AdConfig[];
+  announcements: Announcement[];
+  adminSettings: AdminSettings;
   // Question submission
   lastQuestionScore: number | null; lastQuestionFeedback: string;
 
@@ -108,8 +119,15 @@ export interface GameState {
   // Admin actions
   setPackages: (packages: PackageData[]) => void;
   togglePackageActive: (packageId: string) => void;
+  addPackage: (pkg: PackageData) => void;
+  removePackage: (packageId: string) => void;
+  updatePackage: (packageId: string, updates: Partial<PackageData>) => void;
   setAdConfigs: (configs: AdConfig[]) => void;
   toggleAdEnabled: (adType: string) => void;
+  addAnnouncement: (announcement: Omit<Announcement, 'id' | 'createdAt'>) => void;
+  removeAnnouncement: (id: string) => void;
+  toggleAnnouncement: (id: string) => void;
+  updateAdminSettings: (settings: Partial<AdminSettings>) => void;
   // Question
   setLastQuestionScore: (score: number | null, feedback?: string) => void;
 }
@@ -198,7 +216,12 @@ export const useGameStore = create<GameState>()(
       dailyCompleted: false, dailyScore: 0, lastDailyDate: '',
       soundEnabled: true, vibrationEnabled: true, darkMode: false,
       user: null, isLoggedIn: false, isAdmin: false, authToken: null,
-      packages: [], adConfigs: [],
+      packages: [], adConfigs: [], announcements: [],
+      adminSettings: {
+        welcomeCoins: 150, welcomeGems: 8, dailyBonusCoins: 30,
+        transferFeeCoins: 5, transferFeeGems: 10, minTransferAmount: 10,
+        coinRewardPerGame: 5, gemRewardPerfect: 3, xpMultiplier: 1,
+      },
       lastQuestionScore: null, lastQuestionFeedback: '',
 
       setScreen: (screen) => set((state) => ({ previousScreen: state.currentScreen, currentScreen: screen })),
@@ -441,6 +464,27 @@ export const useGameStore = create<GameState>()(
       toggleAdEnabled: (adType) => set((s) => ({
         adConfigs: s.adConfigs.map(c => c.adType === adType ? { ...c, isEnabled: !c.isEnabled } : c),
       })),
+      addPackage: (pkg) => set((s) => ({ packages: [...s.packages, pkg] })),
+      removePackage: (packageId) => set((s) => ({ packages: s.packages.filter(p => p.id !== packageId) })),
+      updatePackage: (packageId, updates) => set((s) => ({
+        packages: s.packages.map(p => p.id === packageId ? { ...p, ...updates } : p),
+      })),
+      addAnnouncement: (announcement) => set((s) => ({
+        announcements: [...s.announcements, {
+          ...announcement,
+          id: `ann-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          createdAt: new Date().toISOString(),
+        }],
+      })),
+      removeAnnouncement: (id) => set((s) => ({
+        announcements: s.announcements.filter(a => a.id !== id),
+      })),
+      toggleAnnouncement: (id) => set((s) => ({
+        announcements: s.announcements.map(a => a.id === id ? { ...a, isActive: !a.isActive } : a),
+      })),
+      updateAdminSettings: (settings) => set((s) => ({
+        adminSettings: { ...s.adminSettings, ...settings },
+      })),
       // Question
       setLastQuestionScore: (score, feedback) => set({ lastQuestionScore: score, lastQuestionFeedback: feedback || '' }),
 
@@ -469,6 +513,8 @@ export const useGameStore = create<GameState>()(
         vibrationEnabled: state.vibrationEnabled, darkMode: state.darkMode,
         user: state.user, isLoggedIn: state.isLoggedIn, isAdmin: state.isAdmin,
         authToken: state.authToken,
+        packages: state.packages, adConfigs: state.adConfigs,
+        announcements: state.announcements, adminSettings: state.adminSettings,
       }),
     }
   )

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useGameStore } from '@/lib/game-store';
+import { useGameStore, AdConfig } from '@/lib/game-store';
 import { useAuthStore } from '@/lib/auth-local';
 import { useWalletStore, CurrencyType } from '@/lib/wallet-store';
 import { categoryInfo, QuestionCategory } from '@/lib/questions';
@@ -1071,10 +1071,51 @@ function SubmitQuestionScreen() {
 
 // ===== Admin Dashboard =====
 function AdminScreen() {
-  const { setScreen, isAdmin, packages, adConfigs, togglePackageActive, toggleAdEnabled } = useGameStore();
-  const [tab, setTab] = useState<'stats' | 'packages' | 'ads' | 'users'>('stats');
+  const { setScreen, isAdmin, packages, adConfigs, announcements, adminSettings,
+    togglePackageActive, toggleAdEnabled, addPackage, removePackage, updatePackage,
+    addAnnouncement, removeAnnouncement, toggleAnnouncement, updateAdminSettings,
+    gamesPlayed, totalScore, playerCoins, playerGems } = useGameStore();
+  const authStore = useAuthStore;
+  const walletStore = useWalletStore();
+  const [tab, setTab] = useState<'stats' | 'users' | 'packages' | 'ads' | 'questions' | 'transactions' | 'settings'>('stats');
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+
+  // User management states
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [editUserModal, setEditUserModal] = useState(false);
+  const [banModal, setBanModal] = useState(false);
+  const [banReason, setBanReason] = useState('');
+  const [userSearch, setUserSearch] = useState('');
+
+  // Package creation states
+  const [showAddPackage, setShowAddPackage] = useState(false);
+  const [newPkg, setNewPkg] = useState({ name: '', description: '', icon: '📦', coins: 0, gems: 0, price: 0, color: 'from-yellow-500 to-amber-600' });
+
+  // Announcement states
+  const [showAddAnnouncement, setShowAddAnnouncement] = useState(false);
+  const [newAnn, setNewAnn] = useState({ title: '', message: '', type: 'info' as const });
+
+  // Edit user form
+  const [editForm, setEditForm] = useState({ name: '', email: '', coins: 0, gems: 0, level: 1, role: 'user' as 'user' | 'admin' });
 
   if (!isAdmin) { setScreen('menu'); return null; }
+
+  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const allUsers = authStore.getState().getAllUsersIncludingAdmin();
+  const filteredUsers = userSearch.trim()
+    ? allUsers.filter(u => u.name.includes(userSearch) || u.email.includes(userSearch))
+    : allUsers;
+
+  const selectedUser = selectedUserId ? allUsers.find(u => u.id === selectedUserId) : null;
+
+  const totalCoinsInSystem = allUsers.reduce((sum, u) => sum + u.coins, 0);
+  const totalGemsInSystem = allUsers.reduce((sum, u) => sum + u.gems, 0);
+  const bannedCount = allUsers.filter(u => u.banned).length;
+  const allTransactions = walletStore.getState().transactions;
 
   const defaultAds: AdConfig[] = adConfigs.length > 0 ? adConfigs : [
     { adType: 'banner', isEnabled: false, frequency: 1, position: 'bottom' },
@@ -1082,83 +1123,699 @@ function AdminScreen() {
     { adType: 'rewarded', isEnabled: false, frequency: 5, position: 'bottom' },
   ];
 
+  const handleAddPackage = () => {
+    if (!newPkg.name || newPkg.coins <= 0) { showToast('يرجى ملء الحقول المطلوبة', 'error'); return; }
+    addPackage({
+      id: `pkg-${Date.now()}`,
+      name: newPkg.name,
+      description: newPkg.description || newPkg.name,
+      icon: newPkg.icon,
+      coins: newPkg.coins,
+      gems: newPkg.gems,
+      price: newPkg.price,
+      color: newPkg.color,
+      isActive: true,
+    });
+    setShowAddPackage(false);
+    setNewPkg({ name: '', description: '', icon: '📦', coins: 0, gems: 0, price: 0, color: 'from-yellow-500 to-amber-600' });
+    showToast('تمت إضافة الباقة بنجاح');
+  };
+
+  const handleAddAnnouncement = () => {
+    if (!newAnn.title || !newAnn.message) { showToast('يرجى ملء العنوان والرسالة', 'error'); return; }
+    addAnnouncement({ ...newAnn, isActive: true });
+    setShowAddAnnouncement(false);
+    setNewAnn({ title: '', message: '', type: 'info' });
+    showToast('تمت إضافة الإعلان بنجاح');
+  };
+
+  const handleBanUser = () => {
+    if (!selectedUserId || !banReason.trim()) { showToast('يرجى إدخال سبب الحظر', 'error'); return; }
+    const result = authStore.getState().banUser(selectedUserId, banReason);
+    if (result.success) { showToast('تم حظر المستخدم'); setBanModal(false); setBanReason(''); }
+    else { showToast(result.error || 'فشل الحظر', 'error'); }
+  };
+
+  const handleEditUser = () => {
+    if (!selectedUserId) return;
+    authStore.getState().updateUserById(selectedUserId, {
+      name: editForm.name,
+      email: editForm.email,
+      coins: editForm.coins,
+      gems: editForm.gems,
+      level: editForm.level,
+      role: editForm.role,
+    });
+    setEditUserModal(false);
+    showToast('تم تحديث بيانات المستخدم');
+  };
+
+  const handleDeleteUser = (userId: string) => {
+    const result = authStore.getState().deleteUser(userId);
+    if (result.success) { showToast('تم حذف المستخدم'); setSelectedUserId(null); }
+    else { showToast(result.error || 'فشل الحذف', 'error'); }
+  };
+
+  const openEditModal = (user: typeof allUsers[0]) => {
+    setEditForm({ name: user.name, email: user.email, coins: user.coins, gems: user.gems, level: user.level, role: user.role as 'user' | 'admin' });
+    setEditUserModal(true);
+  };
+
+  const tabItems = [
+    { id: 'stats' as const, icon: '📊', label: 'الإحصائيات' },
+    { id: 'users' as const, icon: '👥', label: 'المستخدمين' },
+    { id: 'packages' as const, icon: '📦', label: 'الباقات' },
+    { id: 'ads' as const, icon: '📢', label: 'الإعلانات' },
+    { id: 'questions' as const, icon: '❓', label: 'الأسئلة' },
+    { id: 'transactions' as const, icon: '💰', label: 'المعاملات' },
+    { id: 'settings' as const, icon: '⚙️', label: 'الإعدادات' },
+  ];
+
+  const pkgIcons = ['📦', '🎁', '🏆', '💎', '⭐', '🎯', '🎪', '🌟'];
+  const pkgColors = [
+    'from-yellow-500 to-amber-600', 'from-emerald-500 to-teal-600', 'from-purple-500 to-violet-600',
+    'from-blue-500 to-cyan-600', 'from-red-500 to-rose-600', 'from-pink-500 to-fuchsia-600',
+    'from-cyan-500 to-blue-600', 'from-orange-500 to-red-600',
+  ];
+
   return (
-    <motion.div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 p-4" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+    <motion.div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 p-4 pb-8" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+      {/* Header */}
       <div className="flex items-center gap-3 mb-4">
         <motion.button whileTap={{ scale: 0.9 }} onClick={() => setScreen('menu')} className="text-white/60 hover:text-white text-2xl">→</motion.button>
         <h2 className="text-xl font-bold text-white">👑 لوحة التحكم</h2>
       </div>
-      <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-        {(['stats', 'packages', 'ads', 'users'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${tab === t ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' : 'bg-white/5 text-white/40'}`}>
-            {t === 'stats' ? '📊 الإحصائيات' : t === 'packages' ? '📦 الباقات' : t === 'ads' ? '📢 الإعلانات' : '👥 المستخدمين'}
+
+      {/* Tabs */}
+      <div className="flex gap-2 mb-4 overflow-x-auto pb-2 scrollbar-hide" style={{ scrollbarWidth: 'none' }}>
+        {tabItems.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={`px-3 py-2 rounded-xl text-[11px] font-bold whitespace-nowrap transition-all flex items-center gap-1 ${tab === t.id ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' : 'bg-white/5 text-white/40'}`}>
+            <span>{t.icon}</span><span>{t.label}</span>
           </button>
         ))}
       </div>
 
+      {/* ===== Stats Tab ===== */}
       {tab === 'stats' && (
-        <div className="grid grid-cols-2 gap-3">
-          {[
-            { icon: '👥', value: '0', label: 'المستخدمين', color: 'from-blue-500/20 to-cyan-500/20' },
-            { icon: '🎮', value: '0', label: 'الألعاب', color: 'from-emerald-500/20 to-teal-500/20' },
-            { icon: '💰', value: '0', label: 'الإيرادات', color: 'from-yellow-500/20 to-amber-500/20' },
-            { icon: '📦', value: packages.filter(p => p.isActive).length, label: 'باقات نشطة', color: 'from-purple-500/20 to-violet-500/20' },
-          ].map(stat => (
-            <div key={stat.label} className={`bg-gradient-to-br ${stat.color} border border-white/5 rounded-2xl p-4 text-center`}>
-              <span className="text-3xl">{stat.icon}</span>
-              <div className="text-white font-bold text-xl mt-1">{stat.value}</div>
-              <div className="text-white/40 text-xs">{stat.label}</div>
-            </div>
-          ))}
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { icon: '👥', value: allUsers.length, label: 'إجمالي المستخدمين', color: 'from-blue-500/20 to-cyan-500/20' },
+              { icon: '🎮', value: gamesPlayed, label: 'الألعاب المُلعبة', color: 'from-emerald-500/20 to-teal-500/20' },
+              { icon: '🪙', value: totalCoinsInSystem.toLocaleString(), label: 'إجمالي العملات', color: 'from-yellow-500/20 to-amber-500/20' },
+              { icon: '💎', value: totalGemsInSystem.toLocaleString(), label: 'إجمالي الجواهر', color: 'from-purple-500/20 to-violet-500/20' },
+              { icon: '🚫', value: bannedCount, label: 'محظورين', color: 'from-red-500/20 to-rose-500/20' },
+              { icon: '📦', value: packages.filter(p => p.isActive).length, label: 'باقات نشطة', color: 'from-orange-500/20 to-amber-500/20' },
+              { icon: '💰', value: allTransactions.length, label: 'المعاملات', color: 'from-emerald-500/20 to-green-500/20' },
+              { icon: '📢', value: announcements.filter(a => a.isActive).length, label: 'إعلانات نشطة', color: 'from-cyan-500/20 to-blue-500/20' },
+            ].map(stat => (
+              <motion.div key={stat.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                className={`bg-gradient-to-br ${stat.color} border border-white/5 rounded-2xl p-4 text-center`}>
+                <span className="text-2xl">{stat.icon}</span>
+                <div className="text-white font-bold text-lg mt-1">{stat.value}</div>
+                <div className="text-white/40 text-[10px]">{stat.label}</div>
+              </motion.div>
+            ))}
+          </div>
+          {/* Recent Activity */}
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+            <div className="text-white/50 text-sm font-bold mb-3">🕐 آخر النشاطات</div>
+            {allTransactions.length === 0 ? (
+              <div className="text-white/30 text-sm text-center py-4">لا توجد نشاطات بعد</div>
+            ) : (
+              <div className="space-y-2 max-h-48 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+                {allTransactions.slice(0, 10).map(tx => (
+                  <div key={tx.id} className="flex items-center gap-2 bg-white/5 rounded-lg p-2 text-xs">
+                    <span>{tx.type === 'earn' || tx.type === 'bonus' || tx.type === 'reward' ? '🟢' : tx.type === 'transfer_in' ? '📥' : tx.type === 'transfer_out' ? '📤' : '🔴'}</span>
+                    <span className="text-white/70 flex-1 truncate">{tx.description}</span>
+                    <span className="text-white/30 text-[10px]">{new Date(tx.timestamp).toLocaleDateString('ar')}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
+      {/* ===== Users Tab ===== */}
+      {tab === 'users' && (
+        <div className="space-y-4">
+          {/* Search */}
+          <input value={userSearch} onChange={(e) => setUserSearch(e.target.value)} placeholder="🔍 ابحث عن مستخدم..." dir="rtl"
+            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:border-yellow-500/50 focus:outline-none text-sm" />
+
+          {/* Users List */}
+          <div className="space-y-2 max-h-[60vh] overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+            {filteredUsers.length === 0 ? (
+              <div className="text-white/30 text-sm text-center py-8">لا يوجد مستخدمون</div>
+            ) : (
+              filteredUsers.map(user => (
+                <motion.div key={user.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                  className={`bg-white/5 border rounded-xl p-3 ${user.banned ? 'border-red-500/30 bg-red-500/5' : selectedUserId === user.id ? 'border-yellow-500/30 bg-yellow-500/5' : 'border-white/5'}`}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center text-lg border border-white/10">
+                      {user.avatar}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-white font-bold text-sm truncate">{user.name}</span>
+                        {user.role === 'admin' && <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded-full">مسؤول</span>}
+                        {user.banned && <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded-full">🚫 محظور</span>}
+                      </div>
+                      <div className="text-white/30 text-[10px] truncate">{user.email}</div>
+                      <div className="flex items-center gap-3 mt-1 text-[10px]">
+                        <span className="text-yellow-400">🪙 {user.coins}</span>
+                        <span className="text-purple-400">💎 {user.gems}</span>
+                        <span className="text-white/30">Lv.{user.level}</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <button onClick={() => { setSelectedUserId(user.id); openEditModal(user); }}
+                        className="text-[10px] bg-blue-500/20 text-blue-400 px-2 py-1 rounded-lg hover:bg-blue-500/30">✏️ تعديل</button>
+                      {user.role !== 'admin' && (
+                        <>
+                          {user.banned ? (
+                            <button onClick={() => { authStore.getState().unbanUser(user.id); showToast('تم إلغاء الحظر'); }}
+                              className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded-lg hover:bg-emerald-500/30">✅ فك</button>
+                          ) : (
+                            <button onClick={() => { setSelectedUserId(user.id); setBanModal(true); }}
+                              className="text-[10px] bg-red-500/20 text-red-400 px-2 py-1 rounded-lg hover:bg-red-500/30">🚫 حظر</button>
+                          )}
+                          <button onClick={() => handleDeleteUser(user.id)}
+                            className="text-[10px] bg-red-500/20 text-red-400 px-2 py-1 rounded-lg hover:bg-red-500/30">🗑️ حذف</button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ===== Packages Tab ===== */}
       {tab === 'packages' && (
-        <div className="space-y-3">
-          {packages.map(pkg => (
-            <div key={pkg.id} className="flex items-center gap-3 p-4 bg-white/5 rounded-xl">
-              <span className="text-3xl">{pkg.icon}</span>
-              <div className="flex-1">
-                <div className="text-white font-bold text-sm">{pkg.name}</div>
-                <div className="text-white/40 text-xs">🪙 {pkg.coins} • 💎 {pkg.gems} • {pkg.price} ر.س</div>
-              </div>
-              <button onClick={() => togglePackageActive(pkg.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${pkg.isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
-                {pkg.isActive ? '✅ معروضة' : '❌ مخفية'}
-              </button>
+        <div className="space-y-4">
+          <GlowButton onClick={() => setShowAddPackage(true)} className="w-full text-sm">➕ إضافة باقة جديدة</GlowButton>
+          {packages.length === 0 ? (
+            <div className="text-center py-8">
+              <span className="text-4xl block mb-3">📦</span>
+              <p className="text-white/30 text-sm">لا توجد باقات. أضف باقة جديدة!</p>
             </div>
-          ))}
+          ) : (
+            <div className="space-y-3">
+              {packages.map(pkg => (
+                <div key={pkg.id} className="bg-white/5 border border-white/10 rounded-xl p-4">
+                  <div className="flex items-center gap-3">
+                    <span className="text-3xl">{pkg.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-white font-bold text-sm">{pkg.name}</div>
+                      <div className="text-white/40 text-xs">🪙 {pkg.coins} • 💎 {pkg.gems} • {pkg.price} ر.س</div>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <button onClick={() => togglePackageActive(pkg.id)}
+                        className={`text-[10px] px-2 py-1 rounded-lg font-bold ${pkg.isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                        {pkg.isActive ? '✅ معروضة' : '❌ مخفية'}
+                      </button>
+                      <button onClick={() => removePackage(pkg.id)}
+                        className="text-[10px] bg-red-500/20 text-red-400 px-2 py-1 rounded-lg">🗑️ حذف</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
+      {/* ===== Ads Tab ===== */}
       {tab === 'ads' && (
-        <div className="space-y-3">
-          {defaultAds.map(ad => (
-            <div key={ad.adType} className="flex items-center gap-3 p-4 bg-white/5 rounded-xl">
-              <span className="text-2xl">{ad.adType === 'banner' ? '📢' : ad.adType === 'interstitial' ? '🎬' : '🎁'}</span>
-              <div className="flex-1">
-                <div className="text-white font-bold text-sm">{ad.adType === 'banner' ? 'إعلان بانر' : ad.adType === 'interstitial' ? 'إعلان بيني' : 'إعلان مكافأة'}</div>
-                <div className="text-white/40 text-xs">كل {ad.frequency} ألعاب • {ad.position === 'bottom' ? 'أسفل' : 'بين الأسئلة'}</div>
+        <div className="space-y-4">
+          <div className="space-y-3">
+            {defaultAds.map(ad => (
+              <div key={ad.adType} className="flex items-center gap-3 p-4 bg-white/5 rounded-xl">
+                <span className="text-2xl">{ad.adType === 'banner' ? '📢' : ad.adType === 'interstitial' ? '🎬' : '🎁'}</span>
+                <div className="flex-1">
+                  <div className="text-white font-bold text-sm">{ad.adType === 'banner' ? 'إعلان بانر' : ad.adType === 'interstitial' ? 'إعلان بيني' : 'إعلان مكافأة'}</div>
+                  <div className="text-white/40 text-xs">كل {ad.frequency} ألعاب • {ad.position === 'bottom' ? 'أسفل' : 'بين الأسئلة'}</div>
+                </div>
+                <button onClick={() => toggleAdEnabled(ad.adType)}
+                  className={`w-12 h-6 rounded-full transition-all ${ad.isEnabled ? 'bg-yellow-500' : 'bg-white/20'}`}>
+                  <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${ad.isEnabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
+                </button>
               </div>
-              <button onClick={() => toggleAdEnabled(ad.adType)}
-                className={`w-12 h-6 rounded-full transition-all ${ad.isEnabled ? 'bg-yellow-500' : 'bg-white/20'}`}>
-                <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${ad.isEnabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
-              </button>
+            ))}
+          </div>
+
+          {/* Announcements Section */}
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-white/50 text-sm font-bold">📢 إعلانات النظام</div>
+              <button onClick={() => setShowAddAnnouncement(true)}
+                className="text-[10px] bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded-lg hover:bg-yellow-500/30">➕ إضافة</button>
             </div>
-          ))}
-          <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 text-center mt-4">
+            {announcements.length === 0 ? (
+              <div className="text-white/30 text-sm text-center py-4">لا توجد إعلانات</div>
+            ) : (
+              <div className="space-y-2">
+                {announcements.map(ann => (
+                  <div key={ann.id} className={`p-3 rounded-xl border ${ann.isActive ? 'bg-white/5 border-white/10' : 'bg-white/2 border-white/5 opacity-50'}`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span>{ann.type === 'info' ? 'ℹ️' : ann.type === 'warning' ? '⚠️' : '🎁'}</span>
+                      <span className="text-white font-bold text-xs flex-1">{ann.title}</span>
+                      <button onClick={() => toggleAnnouncement(ann.id)}
+                        className={`text-[10px] px-1.5 py-0.5 rounded ${ann.isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                        {ann.isActive ? '✅' : '❌'}
+                      </button>
+                      <button onClick={() => removeAnnouncement(ann.id)}
+                        className="text-[10px] text-red-400 hover:text-red-300">🗑️</button>
+                    </div>
+                    <div className="text-white/40 text-[10px]">{ann.message}</div>
+                    <div className="text-white/20 text-[9px] mt-1">{new Date(ann.createdAt).toLocaleDateString('ar')}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 text-center">
             <span className="text-yellow-400 text-xs">⚠️ الإعلانات تظهر فقط عند تسجيل الدخول بحساب المسؤول للمعاينة</span>
           </div>
         </div>
       )}
 
-      {tab === 'users' && (
-        <div className="text-center p-8">
-          <span className="text-4xl mb-4 block">👥</span>
-          <p className="text-white/40 text-sm">إدارة المستخدمين متاحة من خلال لوحة التحكم الكاملة</p>
+      {/* ===== Questions Tab ===== */}
+      {tab === 'questions' && (
+        <div className="space-y-4">
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+            <div className="text-white/50 text-sm font-bold mb-3">📊 إحصائيات الأسئلة</div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-white/5 rounded-xl p-3 text-center">
+                <div className="text-white font-bold text-lg">{120}</div>
+                <div className="text-white/30 text-[10px]">إجمالي الأسئلة</div>
+              </div>
+              <div className="bg-white/5 rounded-xl p-3 text-center">
+                <div className="text-white font-bold text-lg">17</div>
+                <div className="text-white/30 text-[10px]">تصنيف</div>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+            <div className="text-white/50 text-sm font-bold mb-3">📚 توزيع التصنيفات</div>
+            <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+              {Object.entries(categoryInfo).map(([key, info]) => (
+                <div key={key} className={`bg-gradient-to-br ${info.gradient} rounded-xl p-2 text-center`}>
+                  <div className="text-lg">{info.icon}</div>
+                  <div className="text-white text-[10px] font-bold">{info.name}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+            <div className="text-white/50 text-sm font-bold mb-3">📈 توزيع الصعوبة</div>
+            <div className="space-y-2">
+              {[
+                { label: 'سهل', color: 'bg-emerald-500', percent: 55 },
+                { label: 'متوسط', color: 'bg-yellow-500', percent: 30 },
+                { label: 'صعب', color: 'bg-orange-500', percent: 10 },
+                { label: 'خبير', color: 'bg-red-500', percent: 5 },
+              ].map(d => (
+                <div key={d.label} className="flex items-center gap-3">
+                  <span className="text-white/50 text-xs w-12">{d.label}</span>
+                  <div className="flex-1 bg-white/10 rounded-full h-3 overflow-hidden">
+                    <div className={`${d.color} h-full rounded-full`} style={{ width: `${d.percent}%` }} />
+                  </div>
+                  <span className="text-white/40 text-[10px] w-8 text-left">{d.percent}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <GlowButton onClick={() => setScreen('submitQuestion')} variant="outline" className="w-full text-sm">✍️ إضافة سؤال جديد</GlowButton>
         </div>
       )}
+
+      {/* ===== Transactions Tab ===== */}
+      {tab === 'transactions' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-center">
+              <div className="text-xs text-emerald-400/70 mb-1">إجمالي التحويلات</div>
+              <div className="text-sm font-bold text-emerald-400">{allTransactions.filter(t => t.type === 'transfer_out').length}</div>
+            </div>
+            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 text-center">
+              <div className="text-xs text-yellow-400/70 mb-1">إجمالي المكافآت</div>
+              <div className="text-sm font-bold text-yellow-400">{allTransactions.filter(t => t.type === 'bonus' || t.type === 'reward').length}</div>
+            </div>
+          </div>
+          {allTransactions.length === 0 ? (
+            <div className="text-center py-8">
+              <span className="text-4xl block mb-3">📭</span>
+              <p className="text-white/30 text-sm">لا توجد معاملات بعد</p>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-[60vh] overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+              {allTransactions.slice(0, 50).map(tx => (
+                <div key={tx.id} className="bg-white/5 rounded-xl p-3 flex items-center gap-3">
+                  <div className="text-lg w-8 text-center">
+                    {tx.type === 'earn' || tx.type === 'bonus' || tx.type === 'reward' ? '🟢' :
+                     tx.type === 'transfer_in' ? '📥' : tx.type === 'transfer_out' ? '📤' : '🔴'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-white/80 text-xs font-medium truncate">{tx.description}</div>
+                    <div className="flex items-center gap-2 text-[10px] text-white/30">
+                      <span>{new Date(tx.timestamp).toLocaleDateString('ar')} {new Date(tx.timestamp).toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit' })}</span>
+                      {tx.fromUserName && <span>من: {tx.fromUserName}</span>}
+                      {tx.toUserName && <span>إلى: {tx.toUserName}</span>}
+                    </div>
+                  </div>
+                  <div className="text-left flex-shrink-0">
+                    <div className={`text-xs font-bold ${tx.type === 'earn' || tx.type === 'transfer_in' || tx.type === 'bonus' || tx.type === 'reward' ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {tx.type === 'earn' || tx.type === 'transfer_in' || tx.type === 'bonus' || tx.type === 'reward' ? '+' : '-'}{tx.amount}
+                    </div>
+                    <div className="text-white/30 text-[10px]">{tx.currency === 'coins' ? '🪙' : '💎'}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ===== Settings Tab ===== */}
+      {tab === 'settings' && (
+        <div className="space-y-4">
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+            <div className="text-white/50 text-sm font-bold mb-4">🎁 مكافآت التسجيل</div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-white/60 text-sm">عملات الترحيب</span>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => updateAdminSettings({ welcomeCoins: Math.max(0, adminSettings.welcomeCoins - 10) })}
+                    className="w-7 h-7 rounded-lg bg-white/10 text-white/50 text-sm flex items-center justify-center">-</button>
+                  <span className="text-yellow-400 font-bold w-12 text-center">{adminSettings.welcomeCoins}</span>
+                  <button onClick={() => updateAdminSettings({ welcomeCoins: adminSettings.welcomeCoins + 10 })}
+                    className="w-7 h-7 rounded-lg bg-white/10 text-white/50 text-sm flex items-center justify-center">+</button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-white/60 text-sm">جواهر الترحيب</span>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => updateAdminSettings({ welcomeGems: Math.max(0, adminSettings.welcomeGems - 1) })}
+                    className="w-7 h-7 rounded-lg bg-white/10 text-white/50 text-sm flex items-center justify-center">-</button>
+                  <span className="text-purple-400 font-bold w-12 text-center">{adminSettings.welcomeGems}</span>
+                  <button onClick={() => updateAdminSettings({ welcomeGems: adminSettings.welcomeGems + 1 })}
+                    className="w-7 h-7 rounded-lg bg-white/10 text-white/50 text-sm flex items-center justify-center">+</button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-white/60 text-sm">مكافأة الدخول اليومي</span>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => updateAdminSettings({ dailyBonusCoins: Math.max(0, adminSettings.dailyBonusCoins - 5) })}
+                    className="w-7 h-7 rounded-lg bg-white/10 text-white/50 text-sm flex items-center justify-center">-</button>
+                  <span className="text-yellow-400 font-bold w-12 text-center">{adminSettings.dailyBonusCoins}</span>
+                  <button onClick={() => updateAdminSettings({ dailyBonusCoins: adminSettings.dailyBonusCoins + 5 })}
+                    className="w-7 h-7 rounded-lg bg-white/10 text-white/50 text-sm flex items-center justify-center">+</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+            <div className="text-white/50 text-sm font-bold mb-4">💸 رسوم التحويل</div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-white/60 text-sm">رسوم العملات (%)</span>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => updateAdminSettings({ transferFeeCoins: Math.max(0, adminSettings.transferFeeCoins - 1) })}
+                    className="w-7 h-7 rounded-lg bg-white/10 text-white/50 text-sm flex items-center justify-center">-</button>
+                  <span className="text-white font-bold w-12 text-center">{adminSettings.transferFeeCoins}%</span>
+                  <button onClick={() => updateAdminSettings({ transferFeeCoins: Math.min(50, adminSettings.transferFeeCoins + 1) })}
+                    className="w-7 h-7 rounded-lg bg-white/10 text-white/50 text-sm flex items-center justify-center">+</button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-white/60 text-sm">رسوم الجواهر (%)</span>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => updateAdminSettings({ transferFeeGems: Math.max(0, adminSettings.transferFeeGems - 1) })}
+                    className="w-7 h-7 rounded-lg bg-white/10 text-white/50 text-sm flex items-center justify-center">-</button>
+                  <span className="text-white font-bold w-12 text-center">{adminSettings.transferFeeGems}%</span>
+                  <button onClick={() => updateAdminSettings({ transferFeeGems: Math.min(50, adminSettings.transferFeeGems + 1) })}
+                    className="w-7 h-7 rounded-lg bg-white/10 text-white/50 text-sm flex items-center justify-center">+</button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-white/60 text-sm">الحد الأدنى للتحويل</span>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => updateAdminSettings({ minTransferAmount: Math.max(1, adminSettings.minTransferAmount - 5) })}
+                    className="w-7 h-7 rounded-lg bg-white/10 text-white/50 text-sm flex items-center justify-center">-</button>
+                  <span className="text-white font-bold w-12 text-center">{adminSettings.minTransferAmount}</span>
+                  <button onClick={() => updateAdminSettings({ minTransferAmount: adminSettings.minTransferAmount + 5 })}
+                    className="w-7 h-7 rounded-lg bg-white/10 text-white/50 text-sm flex items-center justify-center">+</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+            <div className="text-white/50 text-sm font-bold mb-4">🎮 مكافآت اللعب</div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-white/60 text-sm">عملات لكل إجابة صحيحة</span>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => updateAdminSettings({ coinRewardPerGame: Math.max(0, adminSettings.coinRewardPerGame - 1) })}
+                    className="w-7 h-7 rounded-lg bg-white/10 text-white/50 text-sm flex items-center justify-center">-</button>
+                  <span className="text-yellow-400 font-bold w-12 text-center">{adminSettings.coinRewardPerGame}</span>
+                  <button onClick={() => updateAdminSettings({ coinRewardPerGame: adminSettings.coinRewardPerGame + 1 })}
+                    className="w-7 h-7 rounded-lg bg-white/10 text-white/50 text-sm flex items-center justify-center">+</button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-white/60 text-sm">جواهر للعبة مثالية</span>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => updateAdminSettings({ gemRewardPerfect: Math.max(0, adminSettings.gemRewardPerfect - 1) })}
+                    className="w-7 h-7 rounded-lg bg-white/10 text-white/50 text-sm flex items-center justify-center">-</button>
+                  <span className="text-purple-400 font-bold w-12 text-center">{adminSettings.gemRewardPerfect}</span>
+                  <button onClick={() => updateAdminSettings({ gemRewardPerfect: adminSettings.gemRewardPerfect + 1 })}
+                    className="w-7 h-7 rounded-lg bg-white/10 text-white/50 text-sm flex items-center justify-center">+</button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-white/60 text-sm">مضاعف الخبرة</span>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => updateAdminSettings({ xpMultiplier: Math.max(0.5, Number((adminSettings.xpMultiplier - 0.1).toFixed(1))) })}
+                    className="w-7 h-7 rounded-lg bg-white/10 text-white/50 text-sm flex items-center justify-center">-</button>
+                  <span className="text-emerald-400 font-bold w-12 text-center">×{adminSettings.xpMultiplier}</span>
+                  <button onClick={() => updateAdminSettings({ xpMultiplier: Math.min(5, Number((adminSettings.xpMultiplier + 0.1).toFixed(1))) })}
+                    className="w-7 h-7 rounded-lg bg-white/10 text-white/50 text-sm flex items-center justify-center">+</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-red-500/5 border border-red-500/10 rounded-2xl p-4">
+            <div className="text-red-400/70 text-sm font-bold mb-3">⚠️ منطقة الخطر</div>
+            <GlowButton variant="danger" className="w-full text-sm"
+              onClick={() => {
+                if (confirm('هل أنت متأكد من إعادة ضبط الإعدادات؟')) {
+                  updateAdminSettings({
+                    welcomeCoins: 150, welcomeGems: 8, dailyBonusCoins: 30,
+                    transferFeeCoins: 5, transferFeeGems: 10, minTransferAmount: 10,
+                    coinRewardPerGame: 5, gemRewardPerfect: 3, xpMultiplier: 1,
+                  });
+                  showToast('تم إعادة ضبط الإعدادات');
+                }
+              }}>
+              🔄 إعادة ضبط الإعدادات الافتراضية
+            </GlowButton>
+          </div>
+        </div>
+      )}
+
+      {/* ===== Modals ===== */}
+
+      {/* Add Package Modal */}
+      <AnimatePresence>
+        {showAddPackage && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setShowAddPackage(false)}>
+            <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-gray-900 border border-white/10 rounded-2xl p-5 w-full max-w-sm max-h-[85vh] overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+              <h3 className="text-white font-bold text-lg mb-4 text-center">📦 إضافة باقة جديدة</h3>
+              <div className="space-y-3">
+                <input value={newPkg.name} onChange={(e) => setNewPkg({ ...newPkg, name: e.target.value })} placeholder="اسم الباقة" dir="rtl"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:border-yellow-500/50 focus:outline-none text-sm" />
+                <input value={newPkg.description} onChange={(e) => setNewPkg({ ...newPkg, description: e.target.value })} placeholder="الوصف (اختياري)" dir="rtl"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:border-yellow-500/50 focus:outline-none text-sm" />
+                <div className="text-white/40 text-xs">اختر الأيقونة:</div>
+                <div className="flex flex-wrap gap-2">
+                  {pkgIcons.map(icon => (
+                    <button key={icon} onClick={() => setNewPkg({ ...newPkg, icon })}
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${newPkg.icon === icon ? 'bg-yellow-500/30 border-2 border-yellow-500' : 'bg-white/5'}`}>{icon}</button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-white/40 text-[10px]">العملات 🪙</label>
+                    <input value={newPkg.coins || ''} onChange={(e) => setNewPkg({ ...newPkg, coins: parseInt(e.target.value) || 0 })} type="number" dir="ltr"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-center text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-white/40 text-[10px]">الجواهر 💎</label>
+                    <input value={newPkg.gems || ''} onChange={(e) => setNewPkg({ ...newPkg, gems: parseInt(e.target.value) || 0 })} type="number" dir="ltr"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-center text-sm" />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-white/40 text-[10px]">السعر (ر.س)</label>
+                  <input value={newPkg.price || ''} onChange={(e) => setNewPkg({ ...newPkg, price: parseInt(e.target.value) || 0 })} type="number" dir="ltr"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-center text-sm" />
+                </div>
+                <div className="text-white/40 text-xs">اللون:</div>
+                <div className="flex flex-wrap gap-2">
+                  {pkgColors.map(color => (
+                    <button key={color} onClick={() => setNewPkg({ ...newPkg, color })}
+                      className={`w-8 h-8 rounded-lg bg-gradient-to-br ${color} ${newPkg.color === color ? 'ring-2 ring-yellow-500 ring-offset-2 ring-offset-gray-900' : ''}`} />
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-3 mt-4">
+                <GlowButton onClick={handleAddPackage} className="flex-1 text-sm">✅ إضافة</GlowButton>
+                <GlowButton onClick={() => setShowAddPackage(false)} variant="outline" className="flex-1 text-sm">إلغاء</GlowButton>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Add Announcement Modal */}
+      <AnimatePresence>
+        {showAddAnnouncement && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setShowAddAnnouncement(false)}>
+            <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-gray-900 border border-white/10 rounded-2xl p-5 w-full max-w-sm">
+              <h3 className="text-white font-bold text-lg mb-4 text-center">📢 إضافة إعلان</h3>
+              <div className="space-y-3">
+                <input value={newAnn.title} onChange={(e) => setNewAnn({ ...newAnn, title: e.target.value })} placeholder="العنوان" dir="rtl"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:border-yellow-500/50 focus:outline-none text-sm" />
+                <textarea value={newAnn.message} onChange={(e) => setNewAnn({ ...newAnn, message: e.target.value })} placeholder="الرسالة" dir="rtl" rows={3}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:border-yellow-500/50 focus:outline-none text-sm resize-none" />
+                <div className="text-white/40 text-xs">النوع:</div>
+                <div className="flex gap-2">
+                  {([['info', 'ℹ️ معلومة'], ['warning', '⚠️ تحذير'], ['reward', '🎁 مكافأة']] as const).map(([type, label]) => (
+                    <button key={type} onClick={() => setNewAnn({ ...newAnn, type })}
+                      className={`flex-1 py-2 rounded-xl text-xs font-bold ${newAnn.type === type ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' : 'bg-white/5 text-white/40'}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-3 mt-4">
+                <GlowButton onClick={handleAddAnnouncement} className="flex-1 text-sm">✅ إضافة</GlowButton>
+                <GlowButton onClick={() => setShowAddAnnouncement(false)} variant="outline" className="flex-1 text-sm">إلغاء</GlowButton>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Ban User Modal */}
+      <AnimatePresence>
+        {banModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setBanModal(false)}>
+            <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-gray-900 border border-red-500/20 rounded-2xl p-5 w-full max-w-sm text-center">
+              <div className="text-4xl mb-3">🚫</div>
+              <h3 className="text-white font-bold text-lg mb-2">حظر المستخدم</h3>
+              {selectedUser && <p className="text-white/60 text-sm mb-3">هل أنت متأكد من حظر <span className="text-red-400 font-bold">{selectedUser.name}</span>؟</p>}
+              <input value={banReason} onChange={(e) => setBanReason(e.target.value)} placeholder="سبب الحظر" dir="rtl"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:border-red-500/50 focus:outline-none text-sm mb-4" />
+              <div className="flex gap-3">
+                <GlowButton onClick={handleBanUser} variant="danger" className="flex-1 text-sm">🚫 حظر</GlowButton>
+                <GlowButton onClick={() => { setBanModal(false); setBanReason(''); }} variant="outline" className="flex-1 text-sm">إلغاء</GlowButton>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit User Modal */}
+      <AnimatePresence>
+        {editUserModal && selectedUser && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setEditUserModal(false)}>
+            <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-gray-900 border border-white/10 rounded-2xl p-5 w-full max-w-sm max-h-[85vh] overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+              <h3 className="text-white font-bold text-lg mb-4 text-center">✏️ تعديل المستخدم</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-white/40 text-[10px]">الاسم</label>
+                  <input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} dir="rtl"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white text-sm focus:border-yellow-500/50 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="text-white/40 text-[10px]">البريد الإلكتروني</label>
+                  <input value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} dir="ltr"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white text-sm focus:border-yellow-500/50 focus:outline-none" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-white/40 text-[10px]">العملات 🪙</label>
+                    <input value={editForm.coins} onChange={(e) => setEditForm({ ...editForm, coins: parseInt(e.target.value) || 0 })} type="number" dir="ltr"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-center text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-white/40 text-[10px]">الجواهر 💎</label>
+                    <input value={editForm.gems} onChange={(e) => setEditForm({ ...editForm, gems: parseInt(e.target.value) || 0 })} type="number" dir="ltr"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-center text-sm" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-white/40 text-[10px]">المستوى</label>
+                    <input value={editForm.level} onChange={(e) => setEditForm({ ...editForm, level: parseInt(e.target.value) || 1 })} type="number" dir="ltr"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-center text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-white/40 text-[10px]">الصلاحية</label>
+                    <div className="flex gap-2 mt-1">
+                      <button onClick={() => setEditForm({ ...editForm, role: 'user' })}
+                        className={`flex-1 py-2 rounded-xl text-xs font-bold ${editForm.role === 'user' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-white/5 text-white/40'}`}>
+                        مستخدم
+                      </button>
+                      <button onClick={() => setEditForm({ ...editForm, role: 'admin' })}
+                        className={`flex-1 py-2 rounded-xl text-xs font-bold ${editForm.role === 'admin' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-white/5 text-white/40'}`}>
+                        مسؤول
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-3 mt-4">
+                <GlowButton onClick={handleEditUser} className="flex-1 text-sm">✅ حفظ</GlowButton>
+                <GlowButton onClick={() => setEditUserModal(false)} variant="outline" className="flex-1 text-sm">إلغاء</GlowButton>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Toast */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }}
+            className={`fixed bottom-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-2xl text-sm font-bold z-[60] ${toast.type === 'success' ? 'bg-emerald-500/90 text-white' : 'bg-red-500/90 text-white'}`}>
+            {toast.msg}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

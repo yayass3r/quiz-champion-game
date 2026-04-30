@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Question, QuestionCategory, getQuestions, getRandomQuestions, getSurvivalQuestions, categoryInfo } from './questions';
+import { Question, QuestionCategory, getQuestions, getRandomQuestions, getSurvivalQuestions, categoryInfo, questions as defaultQuestions, registerCustomQuestions } from './questions';
 import { useAuthStore } from './auth-local';
 
 export type GameMode = 'classic' | 'speed' | 'survival' | 'marathon' | 'daily' | 'teamBattle';
@@ -130,6 +130,12 @@ export interface GameState {
   updateAdminSettings: (settings: Partial<AdminSettings>) => void;
   // Question
   setLastQuestionScore: (score: number | null, feedback?: string) => void;
+  // Custom questions
+  customQuestions: Question[];
+  addCustomQuestion: (question: Question) => void;
+  removeCustomQuestion: (questionId: string) => void;
+  updateCustomQuestion: (questionId: string, updates: Partial<Question>) => void;
+  getAllQuestions: () => Question[];
 }
 
 const initialPowerUps: PowerUp[] = [
@@ -223,6 +229,7 @@ export const useGameStore = create<GameState>()(
         coinRewardPerGame: 5, gemRewardPerfect: 3, xpMultiplier: 1,
       },
       lastQuestionScore: null, lastQuestionFeedback: '',
+      customQuestions: [],
 
       setScreen: (screen) => set((state) => ({ previousScreen: state.currentScreen, currentScreen: screen })),
       goBack: () => set((state) => ({ currentScreen: state.previousScreen || 'menu', previousScreen: null })),
@@ -314,9 +321,10 @@ export const useGameStore = create<GameState>()(
 
       endGame: () => {
         const state = get();
-        const xpEarned = Math.round(state.score * 0.5);
-        const coinsEarned = Math.round(state.score * 0.1) + (state.correctCount * 5);
-        const gemsEarned = state.correctCount === state.questions.length ? 3 : 0;
+        const adminSettings = state.adminSettings;
+        const xpEarned = Math.round(state.score * 0.5 * adminSettings.xpMultiplier);
+        const coinsEarned = Math.round(state.score * 0.1) + (state.correctCount * adminSettings.coinRewardPerGame);
+        const gemsEarned = state.correctCount === state.questions.length ? adminSettings.gemRewardPerfect : 0;
         const newXP = state.playerXP + xpEarned;
         let newLevel = state.playerLevel;
         let remainingXP = newXP;
@@ -488,6 +496,23 @@ export const useGameStore = create<GameState>()(
       // Question
       setLastQuestionScore: (score, feedback) => set({ lastQuestionScore: score, lastQuestionFeedback: feedback || '' }),
 
+      // Custom questions management
+      addCustomQuestion: (question) => {
+        set((s) => ({ customQuestions: [...s.customQuestions, question] }));
+        registerCustomQuestions(get().customQuestions);
+      },
+      removeCustomQuestion: (questionId) => {
+        set((s) => ({ customQuestions: s.customQuestions.filter(q => q.id !== questionId) }));
+        registerCustomQuestions(get().customQuestions);
+      },
+      updateCustomQuestion: (questionId, updates) => {
+        set((s) => ({
+          customQuestions: s.customQuestions.map(q => q.id === questionId ? { ...q, ...updates } : q),
+        }));
+        registerCustomQuestions(get().customQuestions);
+      },
+      getAllQuestions: () => [...defaultQuestions, ...get().customQuestions],
+
       tick: () => set((state) => {
         if (!state.isTimerActive || state.timeRemaining <= 0) return {};
         const newTime = state.timeRemaining - 1;
@@ -515,6 +540,7 @@ export const useGameStore = create<GameState>()(
         authToken: state.authToken,
         packages: state.packages, adConfigs: state.adConfigs,
         announcements: state.announcements, adminSettings: state.adminSettings,
+        customQuestions: state.customQuestions,
       }),
     }
   )

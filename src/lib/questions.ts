@@ -198,21 +198,33 @@ export const questions: Question[] = [
   { id: 'exp2', text: 'من هو العالم الذي صاغ نظرية النسبية العامة؟', options: ['نيوتن', 'أينشتاين', 'هايزنبرغ', 'بور'], correctIndex: 1, category: 'science', difficulty: 'expert', hint: 'حائز على جائزة نوبل', funFact: 'أينشتاين لم يحصل على نوبل لنسبية بل للتأثير الكهروضوئي!', points: 300, timeLimit: 30 },
 ];
 
+// Registry for custom questions added at runtime
+let customQuestions: Question[] = [];
+
+export function registerCustomQuestions(questions: Question[]) {
+  customQuestions = questions;
+}
+
+export function getAllQuestionsList(): Question[] {
+  return [...questions, ...customQuestions];
+}
+
 export function getQuestions(category?: QuestionCategory, difficulty?: string, count: number = 10): Question[] {
-  let filtered = [...questions];
+  let filtered = [...questions, ...customQuestions];
   if (category) filtered = filtered.filter(q => q.category === category);
   if (difficulty) filtered = filtered.filter(q => q.difficulty === difficulty);
   return filtered.sort(() => Math.random() - 0.5).slice(0, count);
 }
 
 export function getRandomQuestions(count: number = 10): Question[] {
-  return [...questions].sort(() => Math.random() - 0.5).slice(0, count);
+  return [...questions, ...customQuestions].sort(() => Math.random() - 0.5).slice(0, count);
 }
 
 export function getSurvivalQuestions(count: number = 20): Question[] {
-  const easy = questions.filter(q => q.difficulty === 'easy').sort(() => Math.random() - 0.5);
-  const medium = questions.filter(q => q.difficulty === 'medium').sort(() => Math.random() - 0.5);
-  const hard = questions.filter(q => q.difficulty === 'hard').sort(() => Math.random() - 0.5);
-  const expert = questions.filter(q => q.difficulty === 'expert').sort(() => Math.random() - 0.5);
+  const all = [...questions, ...customQuestions];
+  const easy = all.filter(q => q.difficulty === 'easy').sort(() => Math.random() - 0.5);
+  const medium = all.filter(q => q.difficulty === 'medium').sort(() => Math.random() - 0.5);
+  const hard = all.filter(q => q.difficulty === 'hard').sort(() => Math.random() - 0.5);
+  const expert = all.filter(q => q.difficulty === 'expert').sort(() => Math.random() - 0.5);
   return [...easy, ...medium, ...hard, ...expert].slice(0, count);
 }

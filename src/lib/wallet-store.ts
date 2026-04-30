@@ -81,13 +81,17 @@ export const useWalletStore = create<WalletState>()(
           return { success: false, error: 'المستخدم المحدد غير موجود' };
         }
 
-        // Minimum transfer amount
-        if (amount < 10) {
-          return { success: false, error: 'الحد الأدنى للتحويل هو 10' };
+        // Get admin settings for transfer fees and min amount
+        const adminSettings = useGameStore.getState().adminSettings;
+        const minAmount = adminSettings.minTransferAmount;
+
+        // Minimum transfer amount (from admin settings)
+        if (amount < minAmount) {
+          return { success: false, error: `الحد الأدنى للتحويل هو ${minAmount}` };
         }
 
-        // Transfer fee: 5% for coins, 10% for gems
-        const feeRate = currency === 'coins' ? 0.05 : 0.10;
+        // Transfer fee from admin settings
+        const feeRate = currency === 'coins' ? adminSettings.transferFeeCoins / 100 : adminSettings.transferFeeGems / 100;
         const fee = Math.ceil(amount * feeRate);
         const totalDeducted = amount + fee;
 

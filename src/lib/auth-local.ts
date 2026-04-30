@@ -3,6 +3,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { useGameStore } from './game-store';
 
 export interface LocalUser {
   id: string;
@@ -103,7 +104,8 @@ export const useAuthStore = create<AuthState>()(
           return { success: false, error: 'البريد الإلكتروني مستخدم بالفعل' };
         }
 
-        // Create new user
+        // Create new user - use admin settings for welcome bonus
+        const adminSettings = useGameStore.getState().adminSettings;
         const newUser: LocalUser = {
           id: `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           email: email.toLowerCase(),
@@ -112,8 +114,8 @@ export const useAuthStore = create<AuthState>()(
           avatar: '🦁',
           role: 'user',
           level: 1,
-          coins: 150, // Welcome bonus
-          gems: 8,
+          coins: adminSettings.welcomeCoins,
+          gems: adminSettings.welcomeGems,
           provider: 'email',
           createdAt: new Date().toISOString(),
         };

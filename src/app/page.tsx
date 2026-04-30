@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore, AdConfig } from '@/lib/game-store';
 import { useAuthStore } from '@/lib/auth-local';
 import { useWalletStore, CurrencyType } from '@/lib/wallet-store';
-import { categoryInfo, QuestionCategory } from '@/lib/questions';
+import { categoryInfo, QuestionCategory, questions as defaultQuestions } from '@/lib/questions';
 import { Progress } from '@/components/ui/progress';
 
 const pageVariants = {
@@ -102,7 +102,7 @@ function SplashScreen() {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}>
         <GlowButton onClick={() => setScreen('login')} className="text-lg px-12 py-4">🚀 ابدأ المغامرة</GlowButton>
       </motion.div>
-      <motion.p className="text-xs text-white/20 mt-8" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}>الإصدار 3.0 — 17 تصنيف وأكثر من 120 سؤال</motion.p>
+      <motion.p className="text-xs text-white/20 mt-8" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}>الإصدار 3.0 — لوحة تحكم متقدمة وأكثر من 120 سؤال</motion.p>
     </motion.div>
   );
 }
@@ -553,12 +553,12 @@ function GameplayScreen() {
 
 // ===== Results Screen =====
 function ResultsScreen() {
-  const { score, correctCount, questions, maxCombo, playerCoins, playerLevel, setScreen, resetGame, playerGems } = useGameStore();
+  const { score, correctCount, questions, maxCombo, playerCoins, playerLevel, setScreen, resetGame, playerGems, adminSettings } = useGameStore();
   const totalQuestions = questions.length;
   const percentage = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
-  const coinsEarned = Math.round(score * 0.1) + correctCount * 5;
-  const gemsEarned = correctCount === totalQuestions ? 3 : 0;
-  const xpEarned = Math.round(score * 0.5);
+  const coinsEarned = Math.round(score * 0.1) + correctCount * adminSettings.coinRewardPerGame;
+  const gemsEarned = correctCount === totalQuestions ? adminSettings.gemRewardPerfect : 0;
+  const xpEarned = Math.round(score * 0.5 * adminSettings.xpMultiplier);
 
   // Record wallet transaction once on mount
   const recordedRef = useRef(false);
@@ -1074,11 +1074,13 @@ function AdminScreen() {
   const { setScreen, isAdmin, packages, adConfigs, announcements, adminSettings,
     togglePackageActive, toggleAdEnabled, addPackage, removePackage, updatePackage,
     addAnnouncement, removeAnnouncement, toggleAnnouncement, updateAdminSettings,
-    gamesPlayed, totalScore, playerCoins, playerGems } = useGameStore();
+    gamesPlayed, totalScore, playerCoins, playerGems, customQuestions,
+    addCustomQuestion, removeCustomQuestion } = useGameStore();
   const authStore = useAuthStore;
   const walletStore = useWalletStore();
-  const [tab, setTab] = useState<'stats' | 'users' | 'packages' | 'ads' | 'questions' | 'transactions' | 'settings'>('stats');
+  const [tab, setTab] = useState<'stats' | 'users' | 'packages' | 'ads' | 'questions' | 'transactions' | 'settings' | 'bulk'>('stats');
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [, forceUpdate] = useState(0);
 
   // User management states
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -1086,6 +1088,7 @@ function AdminScreen() {
   const [banModal, setBanModal] = useState(false);
   const [banReason, setBanReason] = useState('');
   const [userSearch, setUserSearch] = useState('');
+  const [userDetailModal, setUserDetailModal] = useState(false);
 
   // Package creation states
   const [showAddPackage, setShowAddPackage] = useState(false);
@@ -1097,6 +1100,14 @@ function AdminScreen() {
 
   // Edit user form
   const [editForm, setEditForm] = useState({ name: '', email: '', coins: 0, gems: 0, level: 1, role: 'user' as 'user' | 'admin' });
+
+  // Question management states
+  const [showAddQuestion, setShowAddQuestion] = useState(false);
+  const [newQ, setNewQ] = useState({ text: '', option1: '', option2: '', option3: '', option4: '', correctIndex: 0, category: 'science' as QuestionCategory, difficulty: 'easy' as 'easy' | 'medium' | 'hard' | 'expert', hint: '', funFact: '', points: 100, timeLimit: 20 });
+
+  // Bulk operations states
+  const [bulkBonusAmount, setBulkBonusAmount] = useState(50);
+  const [bulkBonusCurrency, setBulkBonusCurrency] = useState<'coins' | 'gems'>('coins');
 
   if (!isAdmin) { setScreen('menu'); return null; }
 
@@ -1116,6 +1127,7 @@ function AdminScreen() {
   const totalGemsInSystem = allUsers.reduce((sum, u) => sum + u.gems, 0);
   const bannedCount = allUsers.filter(u => u.banned).length;
   const allTransactions = walletStore.getState().transactions;
+  const allQuestionsList = [...defaultQuestions, ...customQuestions];
 
   const defaultAds: AdConfig[] = adConfigs.length > 0 ? adConfigs : [
     { adType: 'banner', isEnabled: false, frequency: 1, position: 'bottom' },
@@ -1152,7 +1164,7 @@ function AdminScreen() {
   const handleBanUser = () => {
     if (!selectedUserId || !banReason.trim()) { showToast('يرجى إدخال سبب الحظر', 'error'); return; }
     const result = authStore.getState().banUser(selectedUserId, banReason);
-    if (result.success) { showToast('تم حظر المستخدم'); setBanModal(false); setBanReason(''); }
+    if (result.success) { showToast('تم حظر المستخدم'); setBanModal(false); setBanReason(''); forceUpdate(n => n + 1); }
     else { showToast(result.error || 'فشل الحظر', 'error'); }
   };
 
@@ -1168,11 +1180,12 @@ function AdminScreen() {
     });
     setEditUserModal(false);
     showToast('تم تحديث بيانات المستخدم');
+    forceUpdate(n => n + 1);
   };
 
   const handleDeleteUser = (userId: string) => {
     const result = authStore.getState().deleteUser(userId);
-    if (result.success) { showToast('تم حذف المستخدم'); setSelectedUserId(null); }
+    if (result.success) { showToast('تم حذف المستخدم'); setSelectedUserId(null); forceUpdate(n => n + 1); }
     else { showToast(result.error || 'فشل الحذف', 'error'); }
   };
 
@@ -1181,13 +1194,67 @@ function AdminScreen() {
     setEditUserModal(true);
   };
 
+  const handleAddQuestion = () => {
+    if (!newQ.text || !newQ.option1 || !newQ.option2 || !newQ.option3 || !newQ.option4) { showToast('يرجى ملء السؤال وجميع الخيارات', 'error'); return; }
+    addCustomQuestion({
+      id: `cq-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      text: newQ.text,
+      options: [newQ.option1, newQ.option2, newQ.option3, newQ.option4],
+      correctIndex: newQ.correctIndex,
+      category: newQ.category,
+      difficulty: newQ.difficulty,
+      hint: newQ.hint || 'لا يوجد تلميح',
+      funFact: newQ.funFact || '',
+      points: newQ.points,
+      timeLimit: newQ.timeLimit,
+      isUserSubmitted: true,
+      qualityScore: 100,
+    });
+    setShowAddQuestion(false);
+    setNewQ({ text: '', option1: '', option2: '', option3: '', option4: '', correctIndex: 0, category: 'science', difficulty: 'easy', hint: '', funFact: '', points: 100, timeLimit: 20 });
+    showToast('تمت إضافة السؤال بنجاح');
+  };
+
+  const handleBulkBonus = () => {
+    const users = allUsers.filter(u => u.role !== 'admin' && !u.banned);
+    users.forEach(u => {
+      if (bulkBonusCurrency === 'coins') {
+        authStore.getState().updateUserById(u.id, { coins: u.coins + bulkBonusAmount });
+      } else {
+        authStore.getState().updateUserById(u.id, { gems: u.gems + bulkBonusAmount });
+      }
+    });
+    walletStore.getState().addTransaction({ type: 'bonus', amount: bulkBonusAmount, currency: bulkBonusCurrency, description: `مكافأة جماعية من المسؤول: ${bulkBonusAmount} ${bulkBonusCurrency === 'coins' ? 'عملة' : 'جوهرة'} لكل مستخدم` });
+    showToast(`تم إرسال ${bulkBonusAmount} ${bulkBonusCurrency === 'coins' ? 'عملة' : 'جوهرة'} إلى ${users.length} مستخدم`);
+    forceUpdate(n => n + 1);
+  };
+
+  const handleExportData = (type: 'users' | 'transactions') => {
+    let data: object[];
+    let filename: string;
+    if (type === 'users') {
+      data = allUsers.map(u => ({ id: u.id, name: u.name, email: u.email, coins: u.coins, gems: u.gems, level: u.level, role: u.role, banned: u.banned, createdAt: u.createdAt }));
+      filename = 'quiz-champion-users.json';
+    } else {
+      data = allTransactions;
+      filename = 'quiz-champion-transactions.json';
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+    showToast('تم تصدير البيانات بنجاح');
+  };
+
   const tabItems = [
     { id: 'stats' as const, icon: '📊', label: 'الإحصائيات' },
     { id: 'users' as const, icon: '👥', label: 'المستخدمين' },
+    { id: 'questions' as const, icon: '❓', label: 'الأسئلة' },
     { id: 'packages' as const, icon: '📦', label: 'الباقات' },
     { id: 'ads' as const, icon: '📢', label: 'الإعلانات' },
-    { id: 'questions' as const, icon: '❓', label: 'الأسئلة' },
     { id: 'transactions' as const, icon: '💰', label: 'المعاملات' },
+    { id: 'bulk' as const, icon: '🚀', label: 'عمليات جماعية' },
     { id: 'settings' as const, icon: '⚙️', label: 'الإعدادات' },
   ];
 
@@ -1204,13 +1271,15 @@ function AdminScreen() {
       <div className="flex items-center gap-3 mb-4">
         <motion.button whileTap={{ scale: 0.9 }} onClick={() => setScreen('menu')} className="text-white/60 hover:text-white text-2xl">→</motion.button>
         <h2 className="text-xl font-bold text-white">👑 لوحة التحكم</h2>
+        <div className="flex-1" />
+        <button onClick={() => { handleExportData('users'); }} className="text-[10px] bg-blue-500/20 text-blue-400 px-2 py-1 rounded-lg">📥 تصدير</button>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-4 overflow-x-auto pb-2 scrollbar-hide" style={{ scrollbarWidth: 'none' }}>
+      <div className="flex gap-1.5 mb-4 overflow-x-auto pb-2 scrollbar-hide" style={{ scrollbarWidth: 'none' }}>
         {tabItems.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={`px-3 py-2 rounded-xl text-[11px] font-bold whitespace-nowrap transition-all flex items-center gap-1 ${tab === t.id ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' : 'bg-white/5 text-white/40'}`}>
+            className={`px-2.5 py-2 rounded-xl text-[10px] font-bold whitespace-nowrap transition-all flex items-center gap-1 ${tab === t.id ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' : 'bg-white/5 text-white/40'}`}>
             <span>{t.icon}</span><span>{t.label}</span>
           </button>
         ))}
@@ -1227,7 +1296,7 @@ function AdminScreen() {
               { icon: '💎', value: totalGemsInSystem.toLocaleString(), label: 'إجمالي الجواهر', color: 'from-purple-500/20 to-violet-500/20' },
               { icon: '🚫', value: bannedCount, label: 'محظورين', color: 'from-red-500/20 to-rose-500/20' },
               { icon: '📦', value: packages.filter(p => p.isActive).length, label: 'باقات نشطة', color: 'from-orange-500/20 to-amber-500/20' },
-              { icon: '💰', value: allTransactions.length, label: 'المعاملات', color: 'from-emerald-500/20 to-green-500/20' },
+              { icon: '❓', value: allQuestionsList.length, label: 'إجمالي الأسئلة', color: 'from-indigo-500/20 to-blue-500/20' },
               { icon: '📢', value: announcements.filter(a => a.isActive).length, label: 'إعلانات نشطة', color: 'from-cyan-500/20 to-blue-500/20' },
             ].map(stat => (
               <motion.div key={stat.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
@@ -1237,6 +1306,15 @@ function AdminScreen() {
                 <div className="text-white/40 text-[10px]">{stat.label}</div>
               </motion.div>
             ))}
+          </div>
+          {/* Quick Stats Bar */}
+          <div className="bg-gradient-to-r from-yellow-500/10 to-amber-600/10 border border-yellow-500/20 rounded-2xl p-4">
+            <div className="text-yellow-400/70 text-xs font-bold mb-2">📈 ملخص سريع</div>
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div><div className="text-white font-bold text-sm">{allUsers.filter(u => u.provider !== 'guest').length}</div><div className="text-white/30 text-[9px]">حسابات مسجلة</div></div>
+              <div><div className="text-white font-bold text-sm">{allUsers.filter(u => u.provider === 'guest').length}</div><div className="text-white/30 text-[9px]">زوار</div></div>
+              <div><div className="text-white font-bold text-sm">{customQuestions.length}</div><div className="text-white/30 text-[9px]">أسئلة مضافة</div></div>
+            </div>
           </div>
           {/* Recent Activity */}
           <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
@@ -1274,9 +1352,9 @@ function AdminScreen() {
                 <motion.div key={user.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                   className={`bg-white/5 border rounded-xl p-3 ${user.banned ? 'border-red-500/30 bg-red-500/5' : selectedUserId === user.id ? 'border-yellow-500/30 bg-yellow-500/5' : 'border-white/5'}`}>
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center text-lg border border-white/10">
+                    <button onClick={() => { setSelectedUserId(user.id); setUserDetailModal(true); }} className="w-10 h-10 rounded-full bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center text-lg border border-white/10">
                       {user.avatar}
-                    </div>
+                    </button>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-white font-bold text-sm truncate">{user.name}</span>
@@ -1288,6 +1366,7 @@ function AdminScreen() {
                         <span className="text-yellow-400">🪙 {user.coins}</span>
                         <span className="text-purple-400">💎 {user.gems}</span>
                         <span className="text-white/30">Lv.{user.level}</span>
+                        <span className="text-white/20">{user.gamesPlayed || 0} لعبة</span>
                       </div>
                     </div>
                     <div className="flex flex-col gap-1">
@@ -1296,7 +1375,7 @@ function AdminScreen() {
                       {user.role !== 'admin' && (
                         <>
                           {user.banned ? (
-                            <button onClick={() => { authStore.getState().unbanUser(user.id); showToast('تم إلغاء الحظر'); }}
+                            <button onClick={() => { authStore.getState().unbanUser(user.id); showToast('تم إلغاء الحظر'); forceUpdate(n => n + 1); }}
                               className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded-lg hover:bg-emerald-500/30">✅ فك</button>
                           ) : (
                             <button onClick={() => { setSelectedUserId(user.id); setBanModal(true); }}
@@ -1312,6 +1391,96 @@ function AdminScreen() {
               ))
             )}
           </div>
+        </div>
+      )}
+
+      {/* ===== Questions Tab ===== */}
+      {tab === 'questions' && (
+        <div className="space-y-4">
+          {/* Question Stats */}
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+            <div className="text-white/50 text-sm font-bold mb-3">📊 إحصائيات الأسئلة</div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-white/5 rounded-xl p-3 text-center">
+                <div className="text-white font-bold text-lg">{defaultQuestions.length}</div>
+                <div className="text-white/30 text-[10px]">أساسية</div>
+              </div>
+              <div className="bg-yellow-500/10 rounded-xl p-3 text-center">
+                <div className="text-yellow-400 font-bold text-lg">{customQuestions.length}</div>
+                <div className="text-white/30 text-[10px]">مضافة</div>
+              </div>
+              <div className="bg-emerald-500/10 rounded-xl p-3 text-center">
+                <div className="text-emerald-400 font-bold text-lg">{allQuestionsList.length}</div>
+                <div className="text-white/30 text-[10px]">الإجمالي</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Category Distribution */}
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+            <div className="text-white/50 text-sm font-bold mb-3">📚 توزيع التصنيفات</div>
+            <div className="grid grid-cols-3 gap-2 max-h-40 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+              {Object.entries(categoryInfo).map(([key, info]) => {
+                const count = allQuestionsList.filter(q => q.category === key).length;
+                return (
+                  <div key={key} className={`bg-gradient-to-br ${info.gradient} rounded-xl p-2 text-center relative`}>
+                    <div className="text-sm">{info.icon}</div>
+                    <div className="text-white text-[9px] font-bold">{info.name}</div>
+                    <div className="text-white/50 text-[8px]">{count} سؤال</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Difficulty Distribution */}
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+            <div className="text-white/50 text-sm font-bold mb-3">📈 توزيع الصعوبة</div>
+            <div className="space-y-2">
+              {(['easy', 'medium', 'hard', 'expert'] as const).map(d => {
+                const count = allQuestionsList.filter(q => q.difficulty === d).length;
+                const percent = allQuestionsList.length > 0 ? Math.round((count / allQuestionsList.length) * 100) : 0;
+                const colors = { easy: 'bg-emerald-500', medium: 'bg-yellow-500', hard: 'bg-orange-500', expert: 'bg-red-500' };
+                const labels = { easy: 'سهل', medium: 'متوسط', hard: 'صعب', expert: 'خبير' };
+                return (
+                  <div key={d} className="flex items-center gap-3">
+                    <span className="text-white/50 text-xs w-12">{labels[d]}</span>
+                    <div className="flex-1 bg-white/10 rounded-full h-3 overflow-hidden">
+                      <div className={`${colors[d]} h-full rounded-full`} style={{ width: `${percent}%` }} />
+                    </div>
+                    <span className="text-white/40 text-[10px] w-16 text-left">{count} ({percent}%)</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Custom Questions List */}
+          {customQuestions.length > 0 && (
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+              <div className="text-white/50 text-sm font-bold mb-3">✍️ الأسئلة المضافة ({customQuestions.length})</div>
+              <div className="space-y-2 max-h-48 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+                {customQuestions.map(q => (
+                  <div key={q.id} className="bg-white/5 rounded-xl p-3 flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-white/80 text-xs font-medium truncate">{q.text}</div>
+                      <div className="flex items-center gap-2 mt-1 text-[10px]">
+                        <span>{categoryInfo[q.category]?.icon} {categoryInfo[q.category]?.name}</span>
+                        <span className="text-white/20">•</span>
+                        <span className={q.difficulty === 'easy' ? 'text-emerald-400' : q.difficulty === 'medium' ? 'text-yellow-400' : q.difficulty === 'hard' ? 'text-orange-400' : 'text-red-400'}>{q.difficulty === 'easy' ? 'سهل' : q.difficulty === 'medium' ? 'متوسط' : q.difficulty === 'hard' ? 'صعب' : 'خبير'}</span>
+                        <span className="text-white/20">•</span>
+                        <span className="text-yellow-400">{q.points} نقطة</span>
+                      </div>
+                    </div>
+                    <button onClick={() => { removeCustomQuestion(q.id); showToast('تم حذف السؤال'); }}
+                      className="text-[10px] bg-red-500/20 text-red-400 px-2 py-1 rounded-lg">🗑️</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <GlowButton onClick={() => setShowAddQuestion(true)} className="w-full text-sm">➕ إضافة سؤال جديد</GlowButton>
         </div>
       )}
 
@@ -1406,56 +1575,6 @@ function AdminScreen() {
         </div>
       )}
 
-      {/* ===== Questions Tab ===== */}
-      {tab === 'questions' && (
-        <div className="space-y-4">
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-            <div className="text-white/50 text-sm font-bold mb-3">📊 إحصائيات الأسئلة</div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-white/5 rounded-xl p-3 text-center">
-                <div className="text-white font-bold text-lg">{120}</div>
-                <div className="text-white/30 text-[10px]">إجمالي الأسئلة</div>
-              </div>
-              <div className="bg-white/5 rounded-xl p-3 text-center">
-                <div className="text-white font-bold text-lg">17</div>
-                <div className="text-white/30 text-[10px]">تصنيف</div>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-            <div className="text-white/50 text-sm font-bold mb-3">📚 توزيع التصنيفات</div>
-            <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
-              {Object.entries(categoryInfo).map(([key, info]) => (
-                <div key={key} className={`bg-gradient-to-br ${info.gradient} rounded-xl p-2 text-center`}>
-                  <div className="text-lg">{info.icon}</div>
-                  <div className="text-white text-[10px] font-bold">{info.name}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-            <div className="text-white/50 text-sm font-bold mb-3">📈 توزيع الصعوبة</div>
-            <div className="space-y-2">
-              {[
-                { label: 'سهل', color: 'bg-emerald-500', percent: 55 },
-                { label: 'متوسط', color: 'bg-yellow-500', percent: 30 },
-                { label: 'صعب', color: 'bg-orange-500', percent: 10 },
-                { label: 'خبير', color: 'bg-red-500', percent: 5 },
-              ].map(d => (
-                <div key={d.label} className="flex items-center gap-3">
-                  <span className="text-white/50 text-xs w-12">{d.label}</span>
-                  <div className="flex-1 bg-white/10 rounded-full h-3 overflow-hidden">
-                    <div className={`${d.color} h-full rounded-full`} style={{ width: `${d.percent}%` }} />
-                  </div>
-                  <span className="text-white/40 text-[10px] w-8 text-left">{d.percent}%</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <GlowButton onClick={() => setScreen('submitQuestion')} variant="outline" className="w-full text-sm">✍️ إضافة سؤال جديد</GlowButton>
-        </div>
-      )}
-
       {/* ===== Transactions Tab ===== */}
       {tab === 'transactions' && (
         <div className="space-y-4">
@@ -1469,6 +1588,7 @@ function AdminScreen() {
               <div className="text-sm font-bold text-yellow-400">{allTransactions.filter(t => t.type === 'bonus' || t.type === 'reward').length}</div>
             </div>
           </div>
+          <button onClick={() => handleExportData('transactions')} className="w-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs rounded-xl p-2 text-center">📥 تصدير المعاملات (JSON)</button>
           {allTransactions.length === 0 ? (
             <div className="text-center py-8">
               <span className="text-4xl block mb-3">📭</span>
@@ -1500,6 +1620,81 @@ function AdminScreen() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ===== Bulk Operations Tab ===== */}
+      {tab === 'bulk' && (
+        <div className="space-y-4">
+          {/* Send Bonus to All Users */}
+          <div className="bg-gradient-to-br from-yellow-500/10 to-amber-600/10 border border-yellow-500/20 rounded-2xl p-4">
+            <div className="text-yellow-400 font-bold text-sm mb-3">🎁 إرسال مكافأة جماعية</div>
+            <p className="text-white/40 text-xs mb-3">أرسل مكافأة لجميع المستخدمين النشطين (باستثناء المسؤولين والمحظورين)</p>
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="text-white/60 text-xs w-20">المبلغ:</span>
+                <input value={bulkBonusAmount} onChange={(e) => setBulkBonusAmount(parseInt(e.target.value) || 0)} type="number" dir="ltr"
+                  className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-center text-sm" />
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-white/60 text-xs w-20">العملة:</span>
+                <div className="flex gap-2 flex-1">
+                  <button onClick={() => setBulkBonusCurrency('coins')}
+                    className={`flex-1 py-2 rounded-xl text-xs font-bold ${bulkBonusCurrency === 'coins' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' : 'bg-white/5 text-white/40'}`}>
+                    🪙 عملات
+                  </button>
+                  <button onClick={() => setBulkBonusCurrency('gems')}
+                    className={`flex-1 py-2 rounded-xl text-xs font-bold ${bulkBonusCurrency === 'gems' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' : 'bg-white/5 text-white/40'}`}>
+                    💎 جواهر
+                  </button>
+                </div>
+              </div>
+              <div className="bg-white/5 rounded-xl p-2 text-center text-white/30 text-[10px]">
+                سيستلم {allUsers.filter(u => u.role !== 'admin' && !u.banned).length} مستخدم × {bulkBonusAmount} = {bulkBonusAmount * allUsers.filter(u => u.role !== 'admin' && !u.banned).length} {bulkBonusCurrency === 'coins' ? 'عملة' : 'جوهرة'}
+              </div>
+              <GlowButton onClick={handleBulkBonus} className="w-full text-sm">🚀 إرسال المكافأة</GlowButton>
+            </div>
+          </div>
+
+          {/* Export Data */}
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+            <div className="text-white/50 text-sm font-bold mb-3">📥 تصدير البيانات</div>
+            <div className="grid grid-cols-2 gap-3">
+              <button onClick={() => handleExportData('users')} className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 text-center hover:bg-blue-500/20 transition-all">
+                <span className="text-2xl block mb-1">👥</span>
+                <span className="text-blue-400 text-xs font-bold">تصدير المستخدمين</span>
+              </button>
+              <button onClick={() => handleExportData('transactions')} className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-center hover:bg-emerald-500/20 transition-all">
+                <span className="text-2xl block mb-1">💰</span>
+                <span className="text-emerald-400 text-xs font-bold">تصدير المعاملات</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Danger Zone */}
+          <div className="bg-red-500/5 border border-red-500/10 rounded-2xl p-4">
+            <div className="text-red-400/70 text-sm font-bold mb-3">⚠️ منطقة الخطر</div>
+            <div className="space-y-2">
+              <GlowButton variant="danger" className="w-full text-sm"
+                onClick={() => {
+                  if (confirm('هل أنت متأكد من حذف جميع المعاملات؟ هذا الإجراء لا يمكن التراجع عنه!')) {
+                    useWalletStore.setState({ transactions: [] });
+                    showToast('تم حذف جميع المعاملات');
+                  }
+                }}>
+                🗑️ مسح سجل المعاملات
+              </GlowButton>
+              <GlowButton variant="danger" className="w-full text-sm"
+                onClick={() => {
+                  if (confirm('هل أنت متأكد من حذف جميع الأسئلة المضافة؟')) {
+                    customQuestions.forEach(q => removeCustomQuestion(q.id));
+                    showToast('تم حذف جميع الأسئلة المضافة');
+                  }
+                }}>
+                🗑️ مسح الأسئلة المضافة
+              </GlowButton>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1634,6 +1829,70 @@ function AdminScreen() {
       )}
 
       {/* ===== Modals ===== */}
+
+      {/* Add Question Modal */}
+      <AnimatePresence>
+        {showAddQuestion && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setShowAddQuestion(false)}>
+            <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-gray-900 border border-white/10 rounded-2xl p-5 w-full max-w-sm max-h-[85vh] overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+              <h3 className="text-white font-bold text-lg mb-4 text-center">❓ إضافة سؤال جديد</h3>
+              <div className="space-y-3">
+                <textarea value={newQ.text} onChange={(e) => setNewQ({ ...newQ, text: e.target.value })} placeholder="نص السؤال" dir="rtl" rows={2}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:border-yellow-500/50 focus:outline-none text-sm resize-none" />
+                {['option1', 'option2', 'option3', 'option4'].map((key, i) => (
+                  <div key={key} className="flex items-center gap-2">
+                    <button onClick={() => setNewQ({ ...newQ, correctIndex: i })}
+                      className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${newQ.correctIndex === i ? 'bg-emerald-500/30 border-2 border-emerald-500 text-emerald-400' : 'bg-white/5 border border-white/10 text-white/40'}`}>
+                      {['أ', 'ب', 'ج', 'د'][i]}
+                    </button>
+                    <input value={(newQ as any)[key]} onChange={(e) => setNewQ({ ...newQ, [key]: e.target.value })} placeholder={`الخيار ${['أ', 'ب', 'ج', 'د'][i]}`} dir="rtl"
+                      className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white placeholder:text-white/30 focus:border-yellow-500/50 focus:outline-none text-sm" />
+                  </div>
+                ))}
+                <div className="text-white/40 text-[10px] mt-1">👆 اضغط على الحرف لتحديد الإجابة الصحيحة</div>
+                <div className="flex gap-2">
+                  <select value={newQ.category} onChange={(e) => setNewQ({ ...newQ, category: e.target.value as QuestionCategory })}
+                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-sm">
+                    {Object.entries(categoryInfo).map(([key, info]) => (
+                      <option key={key} value={key} className="bg-gray-900">{info.icon} {info.name}</option>
+                    ))}
+                  </select>
+                  <select value={newQ.difficulty} onChange={(e) => setNewQ({ ...newQ, difficulty: e.target.value as any })}
+                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-sm">
+                    <option value="easy" className="bg-gray-900">سهل</option>
+                    <option value="medium" className="bg-gray-900">متوسط</option>
+                    <option value="hard" className="bg-gray-900">صعب</option>
+                    <option value="expert" className="bg-gray-900">خبير</option>
+                  </select>
+                </div>
+                <input value={newQ.hint} onChange={(e) => setNewQ({ ...newQ, hint: e.target.value })} placeholder="تلميح (اختياري)" dir="rtl"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:border-yellow-500/50 focus:outline-none text-sm" />
+                <input value={newQ.funFact} onChange={(e) => setNewQ({ ...newQ, funFact: e.target.value })} placeholder="معلومة طريفة (اختياري)" dir="rtl"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:border-yellow-500/50 focus:outline-none text-sm" />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-white/40 text-[10px]">النقاط</label>
+                    <input value={newQ.points} onChange={(e) => setNewQ({ ...newQ, points: parseInt(e.target.value) || 100 })} type="number" dir="ltr"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-center text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-white/40 text-[10px]">الوقت (ثانية)</label>
+                    <input value={newQ.timeLimit} onChange={(e) => setNewQ({ ...newQ, timeLimit: parseInt(e.target.value) || 20 })} type="number" dir="ltr"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-center text-sm" />
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-3 mt-4">
+                <GlowButton onClick={handleAddQuestion} className="flex-1 text-sm">✅ إضافة</GlowButton>
+                <GlowButton onClick={() => setShowAddQuestion(false)} variant="outline" className="flex-1 text-sm">إلغاء</GlowButton>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Add Package Modal */}
       <AnimatePresence>

@@ -23,7 +23,9 @@ export type GameScreen =
   | 'spinWheel'
   | 'admin'
   | 'packages'
-  | 'submitQuestion';
+  | 'submitQuestion'
+  | 'wallet'
+  | 'transfer';
 
 export interface PowerUp {
   id: string; name: string; icon: string; description: string; count: number; cost: number;

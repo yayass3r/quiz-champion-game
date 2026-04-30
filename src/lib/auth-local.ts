@@ -30,6 +30,10 @@ interface AuthState {
   logout: () => void;
   updateUser: (updates: Partial<LocalUser>) => void;
   getUserByEmail: (email: string) => LocalUser | undefined;
+  getUserById: (id: string) => LocalUser | undefined;
+  searchUsers: (query: string) => LocalUser[];
+  getAllUsers: () => LocalUser[];
+  updateUserById: (userId: string, updates: Partial<LocalUser>) => void;
 }
 
 // Simple hash for password (not cryptographically secure, but works for local storage)
@@ -182,6 +186,39 @@ export const useAuthStore = create<AuthState>()(
 
       getUserByEmail: (email) => {
         return get().users.find(u => u.email.toLowerCase() === email.toLowerCase());
+      },
+
+      getUserById: (id) => {
+        return get().users.find(u => u.id === id);
+      },
+
+      searchUsers: (query) => {
+        const q = query.toLowerCase();
+        return get().users.filter(u =>
+          u.id !== get().currentUser?.id &&
+          (u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q))
+        );
+      },
+
+      getAllUsers: () => {
+        const currentUser = get().currentUser;
+        return get().users.filter(u => u.id !== currentUser?.id && u.provider !== 'guest');
+      },
+
+      updateUserById: (userId, updates) => {
+        const { users, currentUser } = get();
+        const updatedUsers = users.map(u =>
+          u.id === userId ? { ...u, ...updates } : u
+        );
+        // If updating current user, also update currentUser
+        if (currentUser && currentUser.id === userId) {
+          set({
+            users: updatedUsers,
+            currentUser: { ...currentUser, ...updates },
+          });
+        } else {
+          set({ users: updatedUsers });
+        }
       },
     }),
     {

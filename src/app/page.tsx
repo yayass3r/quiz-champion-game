@@ -4,6 +4,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '@/lib/game-store';
 import { useAuthStore } from '@/lib/auth-local';
+import { useWalletStore, CurrencyType } from '@/lib/wallet-store';
 import { categoryInfo, QuestionCategory } from '@/lib/questions';
 import { Progress } from '@/components/ui/progress';
 
@@ -43,14 +44,14 @@ function StatBadge({ icon, value, label }: { icon: string; value: string | numbe
 function CoinDisplay() {
   const { playerCoins, playerGems } = useGameStore();
   return (
-    <div className="flex items-center gap-3">
+    <button onClick={() => useGameStore.getState().setScreen('wallet')} className="flex items-center gap-3 hover:scale-105 transition-transform">
       <div className="flex items-center gap-1 bg-yellow-500/20 rounded-full px-3 py-1">
         <span className="text-sm">🪙</span><span className="text-sm font-bold text-yellow-400">{playerCoins}</span>
       </div>
       <div className="flex items-center gap-1 bg-purple-500/20 rounded-full px-3 py-1">
         <span className="text-sm">💎</span><span className="text-sm font-bold text-purple-400">{playerGems}</span>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -198,6 +199,7 @@ function MainMenu() {
   const { setScreen, playerName, playerAvatar, totalScore, gamesPlayed, currentStreak, bestStreak, dailyCompleted, isAdmin } = useGameStore();
   const today = new Date().toLocaleDateString('ar');
   const menuItems = [
+    { icon: '💰', label: 'محفظتي', screen: 'wallet' as const, color: 'from-emerald-500 to-teal-600' },
     { icon: '🎮', label: 'العب الآن', screen: 'modeSelect' as const, color: 'from-yellow-500 to-amber-600' },
     { icon: '📅', label: 'التحدي اليومي', screen: 'dailyChallenge' as const, color: 'from-emerald-500 to-teal-600', badge: dailyCompleted ? '✅' : '🔥' },
     { icon: '🎰', label: 'عجلة الحظ', screen: 'spinWheel' as const, color: 'from-purple-500 to-violet-600' },
@@ -467,6 +469,20 @@ function ResultsScreen() {
   const coinsEarned = Math.round(score * 0.1) + correctCount * 5;
   const gemsEarned = correctCount === totalQuestions ? 3 : 0;
   const xpEarned = Math.round(score * 0.5);
+
+  // Record wallet transaction once on mount
+  const recordedRef = useRef(false);
+  useEffect(() => {
+    if (recordedRef.current) return;
+    recordedRef.current = true;
+    const wallet = useWalletStore.getState();
+    if (coinsEarned > 0) {
+      wallet.addTransaction({ type: 'earn', amount: coinsEarned, currency: 'coins', description: 'مكافأة إتمام اللعبة' });
+    }
+    if (gemsEarned > 0) {
+      wallet.addTransaction({ type: 'reward', amount: gemsEarned, currency: 'gems', description: 'مكافأة إجابات كاملة' });
+    }
+  }, [coinsEarned, gemsEarned]);
   const getGrade = () => {
     if (percentage >= 90) return { emoji: '🏆', text: 'أسطوري!', color: 'text-yellow-400' };
     if (percentage >= 70) return { emoji: '🌟', text: 'ممتاز!', color: 'text-emerald-400' };
@@ -1057,6 +1073,295 @@ function AdminScreen() {
   );
 }
 
+// ===== Wallet Screen =====
+function WalletScreen() {
+  const { setScreen, playerCoins, playerGems } = useGameStore();
+  const walletStore = useWalletStore();
+  const balance = walletStore.getBalance();
+  const totalEarned = walletStore.getTotalEarned();
+  const totalSpent = walletStore.getTotalSpent();
+  const transactions = walletStore.getTransactions(20);
+  const currentUser = useAuthStore.getState().currentUser;
+
+  const typeIcons: Record<string, string> = {
+    earn: '🟢', spend: '🔴', transfer_in: '📥', transfer_out: '📤', bonus: '🎁', reward: '🏆',
+  };
+
+  const formatTime = (ts: string) => {
+    const d = new Date(ts);
+    const now = new Date();
+    const diff = now.getTime() - d.getTime();
+    if (diff < 60000) return 'الآن';
+    if (diff < 3600000) return `منذ ${Math.floor(diff / 60000)} دقيقة`;
+    if (diff < 86400000) return `منذ ${Math.floor(diff / 3600000)} ساعة`;
+    return d.toLocaleDateString('ar');
+  };
+
+  const isPositive = (type: string) => type === 'earn' || type === 'transfer_in' || type === 'bonus' || type === 'reward';
+
+  return (
+    <motion.div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 p-4 pb-8" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+      <div className="flex items-center gap-3 mb-6">
+        <motion.button whileTap={{ scale: 0.9 }} onClick={() => setScreen('menu')} className="text-white/60 hover:text-white text-2xl">→</motion.button>
+        <h2 className="text-xl font-bold text-white">💰 محفظتي</h2>
+      </div>
+
+      {/* Balance Cards */}
+      <div className="grid grid-cols-2 gap-3 mb-5">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+          className="bg-gradient-to-br from-yellow-500/20 to-amber-600/10 border border-yellow-500/20 rounded-2xl p-4 text-center">
+          <div className="text-3xl mb-1">🪙</div>
+          <motion.div key={balance.coins} initial={{ scale: 1.3 }} animate={{ scale: 1 }} className="text-2xl font-extrabold text-yellow-400">{balance.coins.toLocaleString()}</motion.div>
+          <div className="text-white/40 text-xs mt-1">عملة ذهبية</div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+          className="bg-gradient-to-br from-purple-500/20 to-violet-600/10 border border-purple-500/20 rounded-2xl p-4 text-center">
+          <div className="text-3xl mb-1">💎</div>
+          <motion.div key={balance.gems} initial={{ scale: 1.3 }} animate={{ scale: 1 }} className="text-2xl font-extrabold text-purple-400">{balance.gems.toLocaleString()}</motion.div>
+          <div className="text-white/40 text-xs mt-1">جوهرة</div>
+        </motion.div>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="grid grid-cols-3 gap-3 mb-5">
+        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setScreen('transfer')}
+          className="bg-white/5 border border-white/10 rounded-2xl p-3 text-center hover:bg-white/10 transition-colors">
+          <div className="text-2xl mb-1">📤</div>
+          <div className="text-white/70 text-xs font-bold">إرسال</div>
+        </motion.button>
+        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+          className="bg-white/5 border border-white/10 rounded-2xl p-3 text-center hover:bg-white/10 transition-colors">
+          <div className="text-2xl mb-1">📥</div>
+          <div className="text-white/70 text-xs font-bold">استلام</div>
+        </motion.button>
+        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+          className="bg-white/5 border border-white/10 rounded-2xl p-3 text-center hover:bg-white/10 transition-colors">
+          <div className="text-2xl mb-1">📋</div>
+          <div className="text-white/70 text-xs font-bold">سجل المعاملات</div>
+        </motion.button>
+      </div>
+
+      {/* Receive Card */}
+      {currentUser && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+          className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-5">
+          <div className="text-white/40 text-xs text-center mb-2">معرّفك للاستلام</div>
+          <div className="bg-white/5 rounded-xl p-3 text-center">
+            <span className="text-emerald-400 font-mono text-sm font-bold">{currentUser.id.slice(0, 12)}</span>
+          </div>
+          <div className="text-white/30 text-[10px] text-center mt-2">شارك هذا المعرّف مع الآخرين لاستلام التحويلات</div>
+        </motion.div>
+      )}
+
+      {/* Summary Stats */}
+      <div className="grid grid-cols-2 gap-3 mb-5">
+        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-center">
+          <div className="text-xs text-emerald-400/70 mb-1">إجمالي المكاسب</div>
+          <div className="text-sm font-bold text-emerald-400">🪙 {totalEarned.coins} • 💎 {totalEarned.gems}</div>
+        </div>
+        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-center">
+          <div className="text-xs text-red-400/70 mb-1">إجمالي المصروفات</div>
+          <div className="text-sm font-bold text-red-400">🪙 {totalSpent.coins} • 💎 {totalSpent.gems}</div>
+        </div>
+      </div>
+
+      {/* Recent Transactions */}
+      <div className="mb-4">
+        <div className="text-white/50 text-sm font-bold mb-3">📋 آخر المعاملات</div>
+        {transactions.length === 0 ? (
+          <div className="bg-white/5 rounded-2xl p-6 text-center">
+            <div className="text-3xl mb-2">📭</div>
+            <div className="text-white/30 text-sm">لا توجد معاملات بعد</div>
+            <div className="text-white/20 text-xs mt-1">العب ألعاباً لكسب العملات!</div>
+          </div>
+        ) : (
+          <div className="space-y-2 max-h-96 overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+            {transactions.map((tx, i) => (
+              <motion.div key={tx.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
+                className="bg-white/5 rounded-xl p-3 flex items-center gap-3">
+                <div className="text-lg w-8 text-center">{typeIcons[tx.type] || '💳'}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-white/80 text-sm font-medium truncate">{tx.description}</div>
+                  <div className="text-white/30 text-[10px]">{formatTime(tx.timestamp)}</div>
+                </div>
+                <div className="text-left flex-shrink-0">
+                  <div className={`text-sm font-bold ${isPositive(tx.type) ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {isPositive(tx.type) ? '+' : '-'}{tx.amount}
+                  </div>
+                  <div className="text-white/30 text-[10px]">{tx.currency === 'coins' ? '🪙' : '💎'}</div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+// ===== Transfer Screen =====
+function TransferScreen() {
+  const { setScreen, playerCoins, playerGems } = useGameStore();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedUser, setSelectedUser] = useState<{ id: string; name: string; avatar: string } | null>(null);
+  const [amount, setAmount] = useState('');
+  const [currency, setCurrency] = useState<CurrencyType>('coins');
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [transferResult, setTransferResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [isTransferring, setIsTransferring] = useState(false);
+
+  const allUsers = useAuthStore.getState().getAllUsers();
+  const filteredUsers = searchQuery.trim()
+    ? allUsers.filter(u => u.name.includes(searchQuery) || u.email.includes(searchQuery))
+    : allUsers;
+
+  const feeRate = currency === 'coins' ? 0.05 : 0.10;
+  const amountNum = parseInt(amount) || 0;
+  const fee = amountNum > 0 ? Math.ceil(amountNum * feeRate) : 0;
+  const totalDeducted = amountNum + fee;
+  const currentBalance = currency === 'coins' ? playerCoins : playerGems;
+  const canAfford = amountNum >= 10 && totalDeducted <= currentBalance;
+
+  const handleTransfer = async () => {
+    if (!selectedUser || amountNum <= 0) return;
+    setIsTransferring(true);
+    await new Promise(r => setTimeout(r, 800));
+
+    const result = useWalletStore.getState().transferToUser(selectedUser.id, amountNum, currency);
+    if (result.success) {
+      setTransferResult({ success: true, message: `تم تحويل ${amountNum} ${currency === 'coins' ? 'عملة' : 'جوهرة'} إلى ${selectedUser.name} بنجاح!` });
+    } else {
+      setTransferResult({ success: false, message: result.error || 'فشل التحويل' });
+    }
+    setIsTransferring(false);
+    setShowConfirm(false);
+  };
+
+  if (transferResult) {
+    return (
+      <motion.div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 p-4 flex flex-col items-center justify-center" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 200, damping: 15 }} className="text-6xl mb-4">
+          {transferResult.success ? '✅' : '❌'}
+        </motion.div>
+        <motion.h2 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+          className={`text-xl font-bold mb-3 text-center ${transferResult.success ? 'text-emerald-400' : 'text-red-400'}`}>
+          {transferResult.message}
+        </motion.h2>
+        <GlowButton onClick={() => setScreen('wallet')} className="mt-4">💰 العودة للمحفظة</GlowButton>
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 p-4 pb-8" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+      <div className="flex items-center gap-3 mb-6">
+        <motion.button whileTap={{ scale: 0.9 }} onClick={() => setScreen('wallet')} className="text-white/60 hover:text-white text-2xl">→</motion.button>
+        <h2 className="text-xl font-bold text-white">📤 تحويل</h2>
+      </div>
+
+      {/* Select Recipient */}
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
+        <div className="text-white/50 text-sm font-bold mb-3">👤 اختر المستلم</div>
+        {selectedUser ? (
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+            className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500/20 to-teal-600/20 flex items-center justify-center text-xl border border-emerald-500/30">{selectedUser.avatar}</div>
+            <div className="flex-1"><div className="text-emerald-400 font-bold text-sm">{selectedUser.name}</div><div className="text-white/30 text-[10px]">تم الاختيار</div></div>
+            <button onClick={() => setSelectedUser(null)} className="text-white/40 hover:text-red-400 text-lg">✕</button>
+          </motion.div>
+        ) : (
+          <>
+            <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="🔍 ابحث عن مستخدم..." dir="rtl"
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:border-emerald-500/50 focus:outline-none mb-3 text-sm" />
+            <div className="space-y-2 max-h-48 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+              {filteredUsers.length === 0 ? (
+                <div className="text-white/30 text-sm text-center py-4">لا يوجد مستخدمون</div>
+              ) : (
+                filteredUsers.slice(0, 10).map(user => (
+                  <motion.button key={user.id} whileTap={{ scale: 0.98 }} onClick={() => setSelectedUser({ id: user.id, name: user.name, avatar: user.avatar })}
+                    className="w-full bg-white/5 rounded-xl p-3 flex items-center gap-3 hover:bg-white/10 transition-colors text-right">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center text-sm border border-white/10">{user.avatar}</div>
+                    <div className="flex-1"><div className="text-white/80 text-sm font-medium">{user.name}</div><div className="text-white/30 text-[10px]">{user.email}</div></div>
+                    <span className="text-white/20">‹</span>
+                  </motion.button>
+                ))
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Amount & Currency */}
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
+        <div className="text-white/50 text-sm font-bold mb-3">💵 المبلغ</div>
+        <div className="flex gap-2 mb-3">
+          {(['coins', 'gems'] as const).map(c => (
+            <button key={c} onClick={() => setCurrency(c)}
+              className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${currency === c ? (c === 'coins' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' : 'bg-purple-500/20 text-purple-400 border border-purple-500/30') : 'bg-white/5 text-white/40'}`}>
+              {c === 'coins' ? '🪙 عملات' : '💎 جواهر'}
+            </button>
+          ))}
+        </div>
+        <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))} placeholder="أدخل المبلغ" dir="ltr" type="number"
+          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:border-emerald-500/50 focus:outline-none text-center text-lg font-bold" />
+        <div className="flex justify-between mt-3 text-xs">
+          <div className="text-white/30">الحد الأدنى: 10</div>
+          <div className="text-white/30">رصيدك: {currentBalance.toLocaleString()} {currency === 'coins' ? '🪙' : '💎'}</div>
+        </div>
+      </div>
+
+      {/* Fee Summary */}
+      {amountNum > 0 && (
+        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
+          className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
+          <div className="flex justify-between text-sm mb-2">
+            <span className="text-white/50">المبلغ</span>
+            <span className="text-white">{amountNum.toLocaleString()} {currency === 'coins' ? '🪙' : '💎'}</span>
+          </div>
+          <div className="flex justify-between text-sm mb-2">
+            <span className="text-white/50">الرسوم ({feeRate === 0.05 ? '5%' : '10%'})</span>
+            <span className="text-red-400">{fee} {currency === 'coins' ? '🪙' : '💎'}</span>
+          </div>
+          <div className="border-t border-white/10 pt-2 flex justify-between text-sm">
+            <span className="text-white/70 font-bold">الإجمالي</span>
+            <span className={`font-bold ${canAfford ? 'text-emerald-400' : 'text-red-400'}`}>{totalDeducted.toLocaleString()} {currency === 'coins' ? '🪙' : '💎'}</span>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Transfer Button */}
+      <GlowButton onClick={() => setShowConfirm(true)} disabled={!selectedUser || !canAfford || amountNum < 10} className="w-full mb-4">
+        {isTransferring ? '⏳ جارٍ التحويل...' : '📤 تحويل الآن'}
+      </GlowButton>
+
+      {/* Confirmation Dialog */}
+      <AnimatePresence>
+        {showConfirm && selectedUser && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setShowConfirm(false)}>
+            <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-gray-900 border border-white/10 rounded-2xl p-6 w-full max-w-sm text-center">
+              <div className="text-4xl mb-3">⚠️</div>
+              <h3 className="text-white font-bold text-lg mb-2">تأكيد التحويل</h3>
+              <p className="text-white/60 text-sm mb-4">
+                هل تريد تحويل <span className="text-yellow-400 font-bold">{amountNum}</span> {currency === 'coins' ? 'عملة' : 'جوهرة'} إلى <span className="text-emerald-400 font-bold">{selectedUser.name}</span>؟
+              </p>
+              <p className="text-white/40 text-xs mb-4">شامل الرسوم: {totalDeducted} {currency === 'coins' ? '🪙' : '💎'}</p>
+              <div className="flex gap-3">
+                <GlowButton onClick={handleTransfer} className="flex-1" disabled={isTransferring}>
+                  {isTransferring ? '⏳...' : '✅ تأكيد'}
+                </GlowButton>
+                <GlowButton onClick={() => setShowConfirm(false)} variant="outline" className="flex-1">إلغاء</GlowButton>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
 // ===== Main App =====
 export default function Home() {
   const { currentScreen } = useGameStore();
@@ -1080,6 +1385,8 @@ export default function Home() {
       case 'packages': return <PackagesScreen />;
       case 'submitQuestion': return <SubmitQuestionScreen />;
       case 'admin': return <AdminScreen />;
+      case 'wallet': return <WalletScreen />;
+      case 'transfer': return <TransferScreen />;
       default: return <MainMenu />;
     }
   };

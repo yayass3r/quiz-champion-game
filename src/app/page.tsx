@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '@/lib/game-store';
+import { useAuthStore } from '@/lib/auth-local';
 import { categoryInfo, QuestionCategory } from '@/lib/questions';
 import { Progress } from '@/components/ui/progress';
 
@@ -108,6 +109,7 @@ function SplashScreen() {
 // ===== Login Screen =====
 function LoginScreen() {
   const { setScreen, login } = useGameStore();
+  const authStore = useAuthStore;
   const [tab, setTab] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -118,34 +120,35 @@ function LoginScreen() {
   const handleSubmit = async () => {
     setError('');
     setLoading(true);
+    // Small delay for UX feel
+    await new Promise(r => setTimeout(r, 300));
+
     try {
       if (tab === 'register') {
-        if (!name || !email || !password) { setError('يرجى ملء جميع الحقول'); setLoading(false); return; }
-        if (password.length < 6) { setError('كلمة المرور يجب أن تكون 6 أحرف على الأقل'); setLoading(false); return; }
-        const res = await fetch('/api/user', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, email, password }),
-        });
-        const data = await res.json();
-        if (!res.ok) { setError(data.error || 'حدث خطأ'); setLoading(false); return; }
-        login({ id: data.id, email: data.email, name: data.name, avatar: data.avatar, role: 'user', level: 1, coins: data.coins, gems: data.gems });
+        const result = authStore.getState().register(name, email, password);
+        if (!result.success) { setError(result.error || 'حدث خطأ'); setLoading(false); return; }
+        if (result.user) {
+          login({ id: result.user.id, email: result.user.email, name: result.user.name, avatar: result.user.avatar, role: result.user.role, level: result.user.level, coins: result.user.coins, gems: result.user.gems });
+        }
         setScreen('menu');
       } else {
-        if (!email || !password) { setError('يرجى إدخال البريد وكلمة المرور'); setLoading(false); return; }
-        const res = await fetch('/api/auth/[...nextauth]', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
-        });
-        if (!res.ok) { setError('البريد الإلكتروني أو كلمة المرور غير صحيحة'); setLoading(false); return; }
-        // For now, direct login with credentials check
-        const checkRes = await fetch('/api/user', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-user-email': email }, body: JSON.stringify({ checkOnly: true }) });
-        login({ id: 'user', email, name: email.split('@')[0], avatar: '🦁', role: email === 'admin@quizchampion.com' ? 'admin' : 'user', level: 1, coins: 100, gems: 5 });
+        const result = authStore.getState().loginWithEmail(email, password);
+        if (!result.success) { setError(result.error || 'حدث خطأ'); setLoading(false); return; }
+        if (result.user) {
+          login({ id: result.user.id, email: result.user.email, name: result.user.name, avatar: result.user.avatar, role: result.user.role, level: result.user.level, coins: result.user.coins, gems: result.user.gems });
+        }
         setScreen('menu');
       }
-    } catch { setError('حدث خطأ في الاتصال'); }
+    } catch { setError('حدث خطأ غير متوقع'); }
     setLoading(false);
+  };
+
+  const handleGuestLogin = () => {
+    const result = authStore.getState().loginAsGuest();
+    if (result.user) {
+      login({ id: result.user.id, email: result.user.email, name: result.user.name, avatar: result.user.avatar, role: result.user.role, level: result.user.level, coins: result.user.coins, gems: result.user.gems });
+    }
+    setScreen('menu');
   };
 
   return (
@@ -180,8 +183,8 @@ function LoginScreen() {
         </GlowButton>
         <div className="mt-4">
           <div className="text-center text-white/20 text-xs mb-3">— أو —</div>
-          <button className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white/60 hover:bg-white/10 transition-all flex items-center justify-center gap-2">
-            <span className="text-lg">🔵</span><span className="text-sm">تسجيل الدخول بحساب Google</span>
+          <button onClick={handleGuestLogin} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white/60 hover:bg-white/10 transition-all flex items-center justify-center gap-2">
+            <span className="text-lg">🎮</span><span className="text-sm">دخول كزائر</span>
           </button>
         </div>
         <p className="text-white/20 text-xs text-center mt-6">بتسجيلك، تحصل على 150 عملة + 8 جواهر مجاناً!</p>
@@ -592,7 +595,7 @@ function ProfileScreen() {
       {isAdmin && (
         <GlowButton onClick={() => setScreen('admin')} variant="outline" className="w-full mb-3">👑 لوحة تحكم المسؤول</GlowButton>
       )}
-      <GlowButton onClick={() => { logout(); }} variant="danger" className="w-full">🚪 تسجيل الخروج</GlowButton>
+      <GlowButton onClick={() => { useAuthStore.getState().logout(); logout(); }} variant="danger" className="w-full">🚪 تسجيل الخروج</GlowButton>
     </motion.div>
   );
 }
@@ -809,7 +812,7 @@ function SettingsScreen() {
         <button className="w-full flex items-center gap-3 p-4 bg-white/5 rounded-xl text-white/60 hover:text-white transition-all"><span>📤</span><span className="text-sm">شارك التطبيق</span></button>
         <button className="w-full flex items-center gap-3 p-4 bg-white/5 rounded-xl text-white/60 hover:text-white transition-all"><span>ℹ️</span><span className="text-sm">حول التطبيق</span></button>
       </div>
-      {isLoggedIn && <GlowButton onClick={logout} variant="danger" className="w-full mt-6">🚪 تسجيل الخروج</GlowButton>}
+      {isLoggedIn && <GlowButton onClick={() => { useAuthStore.getState().logout(); logout(); }} variant="danger" className="w-full mt-6">🚪 تسجيل الخروج</GlowButton>}
     </motion.div>
   );
 }
@@ -888,15 +891,19 @@ function SubmitQuestionScreen() {
   const handleSubmit = async () => {
     if (!text || options.some(o => !o)) return;
     setLoading(true);
-    try {
-      const res = await fetch('/api/questions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, options, correctIndex, category, hint }),
-      });
-      const data = await res.json();
-      setLastQuestionScore(data.qualityScore, data.aiFeedback);
-    } catch { setLastQuestionScore(0, 'حدث خطأ'); }
+    // Local quality check instead of API call
+    await new Promise(r => setTimeout(r, 800));
+    let qualityScore = 50;
+    let aiFeedback = 'شكراً لمساهمتك!';
+    if (text.length > 15) qualityScore += 15;
+    if (text.length > 30) qualityScore += 10;
+    if (hint && hint.length > 5) qualityScore += 10;
+    if (options.every(o => o.length > 2)) qualityScore += 10;
+    if (qualityScore >= 80) aiFeedback = 'سؤال ممتاز! سيتم مراجعته وإضافته قريباً.';
+    else if (qualityScore >= 60) aiFeedback = 'سؤال جيد! حاول إضافة تلميح أو تفصيل أكثر.';
+    else aiFeedback = 'السؤال قصير جداً. حاول كتابة سؤال أوضح مع تلميح.';
+    qualityScore = Math.min(qualityScore, 100);
+    setLastQuestionScore(qualityScore, aiFeedback);
     setLoading(false);
   };
 

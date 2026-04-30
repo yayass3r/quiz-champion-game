@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Question, QuestionCategory, getQuestions, getRandomQuestions, getSurvivalQuestions, categoryInfo } from './questions';
+import { useAuthStore } from './auth-local';
 
 export type GameMode = 'classic' | 'speed' | 'survival' | 'marathon' | 'daily' | 'teamBattle';
 export type GameScreen =
@@ -316,6 +317,16 @@ export const useGameStore = create<GameState>()(
           totalScore: state.totalScore + state.score, gamesPlayed: state.gamesPlayed + 1,
           gamesWon: state.gamesWon + (isWon ? 1 : 0), leaderboard: newLeaderboard,
         });
+        // Sync to auth store
+        const newState = get();
+        const authState = useAuthStore.getState();
+        if (authState.currentUser) {
+          authState.updateUser({
+            coins: newState.playerCoins,
+            gems: newState.playerGems,
+            level: newState.playerLevel,
+          });
+        }
         get().checkAchievements();
       },
 
@@ -358,6 +369,16 @@ export const useGameStore = create<GameState>()(
             playerGems: item.currency === 'gems' ? state.playerGems - item.cost : state.playerGems,
           });
         }
+        // Sync to auth store after purchase
+        const newState = get();
+        const authState = useAuthStore.getState();
+        if (authState.currentUser) {
+          authState.updateUser({
+            coins: newState.playerCoins,
+            gems: newState.playerGems,
+            avatar: newState.playerAvatar,
+          });
+        }
       },
 
       joinTeam: (team) => set({ currentTeam: team }),
@@ -394,12 +415,23 @@ export const useGameStore = create<GameState>()(
         user, isLoggedIn: true, isAdmin: user.role === 'admin',
         authToken: token || null,
         playerName: user.name, playerAvatar: user.avatar,
+        playerCoins: user.coins, playerGems: user.gems, playerLevel: user.level,
       }),
       logout: () => set({
         user: null, isLoggedIn: false, isAdmin: false, authToken: null, currentScreen: 'splash',
       }),
-      updateUserCoins: (coins) => set((s) => ({ playerCoins: s.playerCoins + coins })),
-      updateUserGems: (gems) => set((s) => ({ playerGems: s.playerGems + gems })),
+      updateUserCoins: (coins) => {
+        set((s) => ({ playerCoins: s.playerCoins + coins }));
+        const newState = get();
+        const authState = useAuthStore.getState();
+        if (authState.currentUser) authState.updateUser({ coins: newState.playerCoins });
+      },
+      updateUserGems: (gems) => {
+        set((s) => ({ playerGems: s.playerGems + gems }));
+        const newState = get();
+        const authState = useAuthStore.getState();
+        if (authState.currentUser) authState.updateUser({ gems: newState.playerGems });
+      },
       // Admin
       setPackages: (packages) => set({ packages }),
       togglePackageActive: (packageId) => set((s) => ({

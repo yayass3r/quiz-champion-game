@@ -16,6 +16,8 @@ export interface LocalUser {
   gems: number;
   provider: string;
   createdAt: string;
+  lastBonusDate?: string;
+  lastLoginDate?: string;
 }
 
 interface AuthState {
@@ -34,6 +36,9 @@ interface AuthState {
   searchUsers: (query: string) => LocalUser[];
   getAllUsers: () => LocalUser[];
   updateUserById: (userId: string, updates: Partial<LocalUser>) => void;
+  addCoins: (amount: number) => void;
+  addGems: (amount: number) => void;
+  claimDailyBonus: () => { claimed: boolean; bonus: number };
 }
 
 // Simple hash for password (not cryptographically secure, but works for local storage)
@@ -219,6 +224,40 @@ export const useAuthStore = create<AuthState>()(
         } else {
           set({ users: updatedUsers });
         }
+      },
+
+      addCoins: (amount) => {
+        const { currentUser, users } = get();
+        if (!currentUser) return;
+        const newCoins = Math.max(0, currentUser.coins + amount);
+        const updatedUser = { ...currentUser, coins: newCoins };
+        const updatedUsers = users.map(u => u.id === currentUser.id ? { ...u, coins: newCoins } : u);
+        set({ currentUser: updatedUser, users: updatedUsers });
+      },
+
+      addGems: (amount) => {
+        const { currentUser, users } = get();
+        if (!currentUser) return;
+        const newGems = Math.max(0, currentUser.gems + amount);
+        const updatedUser = { ...currentUser, gems: newGems };
+        const updatedUsers = users.map(u => u.id === currentUser.id ? { ...u, gems: newGems } : u);
+        set({ currentUser: updatedUser, users: updatedUsers });
+      },
+
+      claimDailyBonus: () => {
+        const { currentUser, users } = get();
+        if (!currentUser) return { claimed: false, bonus: 0 };
+        const today = new Date().toDateString();
+        if (currentUser.lastBonusDate === today) return { claimed: false, bonus: 0 };
+        // Streak bonus: more coins for consecutive days
+        const yesterday = new Date(Date.now() - 86400000).toDateString();
+        const lastLogin = currentUser.lastLoginDate;
+        const isConsecutive = lastLogin === yesterday;
+        const bonus = isConsecutive ? 50 + Math.min(currentUser.level * 5, 100) : 30;
+        const updatedUser = { ...currentUser, coins: currentUser.coins + bonus, lastBonusDate: today, lastLoginDate: today };
+        const updatedUsers = users.map(u => u.id === currentUser.id ? { ...u, coins: u.coins + bonus, lastBonusDate: today, lastLoginDate: today } : u);
+        set({ currentUser: updatedUser, users: updatedUsers });
+        return { claimed: true, bonus };
       },
     }),
     {

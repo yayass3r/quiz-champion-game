@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { useAuthStore, LocalUser } from './auth-local';
+import { useGameStore } from './game-store';
 
 export type TransactionType = 'earn' | 'spend' | 'transfer_in' | 'transfer_out' | 'bonus' | 'reward';
 export type CurrencyType = 'coins' | 'gems';
@@ -48,24 +49,8 @@ export const useWalletStore = create<WalletState>()(
           transactions: [newTx, ...state.transactions],
         }));
 
-        // Update user balance in auth store
-        const authState = useAuthStore.getState();
-        const currentUser = authState.currentUser;
-        if (currentUser) {
-          if (tx.type === 'earn' || tx.type === 'transfer_in' || tx.type === 'bonus' || tx.type === 'reward') {
-            if (tx.currency === 'coins') {
-              authState.updateUser({ coins: currentUser.coins + tx.amount });
-            } else {
-              authState.updateUser({ gems: currentUser.gems + tx.amount });
-            }
-          } else if (tx.type === 'spend' || tx.type === 'transfer_out') {
-            if (tx.currency === 'coins') {
-              authState.updateUser({ coins: Math.max(0, currentUser.coins - tx.amount) });
-            } else {
-              authState.updateUser({ gems: Math.max(0, currentUser.gems - tx.amount) });
-            }
-          }
-        }
+        // Note: Balance updates are now handled by the caller (game-store, page.tsx, etc.)
+        // This function only records the transaction for history purposes.
       },
 
       transferToUser: (toUserId, amount, currency) => {
@@ -124,6 +109,15 @@ export const useWalletStore = create<WalletState>()(
             u.id === toUserId ? { ...u, gems: u.gems + amount } : u
           );
           useAuthStore.setState({ users: updatedUsers });
+        }
+
+        // Sync game-store with auth-store after transfer
+        const updatedCurrentUser = useAuthStore.getState().currentUser;
+        if (updatedCurrentUser) {
+          useGameStore.setState({
+            playerCoins: updatedCurrentUser.coins,
+            playerGems: updatedCurrentUser.gems,
+          });
         }
 
         // Create transaction records

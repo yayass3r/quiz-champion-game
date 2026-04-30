@@ -108,6 +108,25 @@ function SplashScreen() {
 }
 
 // ===== Login Screen =====
+// ===== Toast Notification =====
+function ToastNotification({ message, type = 'success', onClose }: { message: string; type?: 'success' | 'error' | 'info'; onClose: () => void }) {
+  useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t); }, [onClose]);
+  const colors = {
+    success: 'bg-emerald-500/90 border-emerald-400/30',
+    error: 'bg-red-500/90 border-red-400/30',
+    info: 'bg-blue-500/90 border-blue-400/30',
+  };
+  const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+  return (
+    <motion.div initial={{ opacity: 0, y: -50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -50 }}
+      className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] ${colors[type]} border backdrop-blur-sm text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-sm font-bold`}>
+      <span>{icons[type]}</span><span>{message}</span>
+      <button onClick={onClose} className="mr-2 text-white/60 hover:text-white">✕</button>
+    </motion.div>
+  );
+}
+
+// ===== Login Screen =====
 function LoginScreen() {
   const { setScreen, login } = useGameStore();
   const authStore = useAuthStore;
@@ -117,11 +136,12 @@ function LoginScreen() {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [welcomeBonus, setWelcomeBonus] = useState(false);
 
   const handleSubmit = async () => {
     setError('');
     setLoading(true);
-    // Small delay for UX feel
     await new Promise(r => setTimeout(r, 300));
 
     try {
@@ -130,8 +150,10 @@ function LoginScreen() {
         if (!result.success) { setError(result.error || 'حدث خطأ'); setLoading(false); return; }
         if (result.user) {
           login({ id: result.user.id, email: result.user.email, name: result.user.name, avatar: result.user.avatar, role: result.user.role, level: result.user.level, coins: result.user.coins, gems: result.user.gems });
+          setWelcomeBonus(true);
+          setTimeout(() => { setWelcomeBonus(false); setScreen('menu'); }, 2500);
+          return;
         }
-        setScreen('menu');
       } else {
         const result = authStore.getState().loginWithEmail(email, password);
         if (!result.success) { setError(result.error || 'حدث خطأ'); setLoading(false); return; }
@@ -152,6 +174,22 @@ function LoginScreen() {
     setScreen('menu');
   };
 
+  if (welcomeBonus) {
+    return (
+      <motion.div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 p-6 flex flex-col items-center justify-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+        <motion.div initial={{ scale: 0, rotate: -180 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 200, damping: 12 }} className="text-7xl mb-4">🎁</motion.div>
+        <motion.h2 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="text-2xl font-extrabold text-yellow-400 mb-2">مرحباً بك!</motion.h2>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-5 text-center">
+          <div className="text-white/60 text-sm mb-2">مكافأة التسجيل</div>
+          <div className="flex items-center justify-center gap-4">
+            <div className="flex items-center gap-1"><span className="text-2xl">🪙</span><span className="text-xl font-bold text-yellow-400">+150</span></div>
+            <div className="flex items-center gap-1"><span className="text-2xl">💎</span><span className="text-xl font-bold text-purple-400">+8</span></div>
+          </div>
+        </motion.div>
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 p-6 flex flex-col justify-center" variants={pageVariants} initial="initial" animate="animate" exit="exit">
       <div className="text-center mb-8">
@@ -170,15 +208,29 @@ function LoginScreen() {
         </div>
         <div className="space-y-3">
           {tab === 'register' && (
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="الاسم" dir="rtl"
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:border-yellow-500/50 focus:outline-none" />
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="الاسم" dir="rtl"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:border-yellow-500/50 focus:outline-none" />
+            </motion.div>
           )}
           <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="البريد الإلكتروني" type="email" dir="ltr"
             className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:border-yellow-500/50 focus:outline-none" />
-          <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="كلمة المرور" type="password" dir="ltr"
-            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:border-yellow-500/50 focus:outline-none" />
+          <div className="relative">
+            <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="كلمة المرور" type={showPassword ? 'text' : 'password'} dir="ltr"
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 pr-12 text-white placeholder:text-white/30 focus:border-yellow-500/50 focus:outline-none" />
+            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 text-lg">
+              {showPassword ? '🙈' : '👁️'}
+            </button>
+          </div>
         </div>
-        {error && <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 mt-3 text-center"><span className="text-red-400 text-sm">{error}</span></div>}
+        <AnimatePresence>
+          {error && (
+            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+              className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 mt-3 text-center">
+              <span className="text-red-400 text-sm">⚠️ {error}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
         <GlowButton onClick={handleSubmit} disabled={loading} className="w-full mt-4">
           {loading ? '⏳ جارٍ المعالجة...' : tab === 'login' ? '🔑 تسجيل الدخول' : '✨ إنشاء حساب'}
         </GlowButton>
@@ -188,7 +240,7 @@ function LoginScreen() {
             <span className="text-lg">🎮</span><span className="text-sm">دخول كزائر</span>
           </button>
         </div>
-        <p className="text-white/20 text-xs text-center mt-6">بتسجيلك، تحصل على 150 عملة + 8 جواهر مجاناً!</p>
+        <p className="text-white/20 text-xs text-center mt-6">بتسجيلك، تحصل على 150 عملة + 8 جواهر مجاناً! 🎁</p>
       </div>
     </motion.div>
   );
@@ -196,8 +248,23 @@ function LoginScreen() {
 
 // ===== Main Menu =====
 function MainMenu() {
-  const { setScreen, playerName, playerAvatar, totalScore, gamesPlayed, currentStreak, bestStreak, dailyCompleted, isAdmin } = useGameStore();
+  const { setScreen, playerName, playerAvatar, totalScore, gamesPlayed, currentStreak, bestStreak, dailyCompleted, isAdmin, playerCoins, playerGems } = useGameStore();
+  const [dailyBonusPopup, setDailyBonusPopup] = useState<{ show: boolean; bonus: number }>({ show: false, bonus: 0 });
   const today = new Date().toLocaleDateString('ar');
+
+  // Check daily bonus on mount
+  useEffect(() => {
+    const result = useAuthStore.getState().claimDailyBonus();
+    if (result.claimed) {
+      // Sync bonus coins to game-store
+      useGameStore.setState({ playerCoins: useAuthStore.getState().currentUser?.coins ?? playerCoins });
+      // Record wallet transaction
+      useWalletStore.getState().addTransaction({ type: 'bonus', amount: result.bonus, currency: 'coins', description: `مكافأة تسجيل الدخول اليومي${result.bonus > 30 ? ' (سلسلة!)' : ''}` });
+      // Use microtask to avoid synchronous setState in effect
+      queueMicrotask(() => setDailyBonusPopup({ show: true, bonus: result.bonus }));
+    }
+  }, []);
+
   const menuItems = [
     { icon: '💰', label: 'محفظتي', screen: 'wallet' as const, color: 'from-emerald-500 to-teal-600' },
     { icon: '🎮', label: 'العب الآن', screen: 'modeSelect' as const, color: 'from-yellow-500 to-amber-600' },
@@ -214,6 +281,29 @@ function MainMenu() {
 
   return (
     <motion.div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 p-4 pb-8" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+      {/* Daily Bonus Popup */}
+      <AnimatePresence>
+        {dailyBonusPopup.show && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setDailyBonusPopup({ show: false, bonus: 0 })}>
+            <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-gradient-to-br from-yellow-500/20 to-amber-600/20 border border-yellow-500/30 rounded-3xl p-6 max-w-sm w-full text-center">
+              <motion.div animate={{ rotate: [0, 10, -10, 0], scale: [1, 1.1, 1] }} transition={{ duration: 1, repeat: 2 }} className="text-6xl mb-3">🎁</motion.div>
+              <h3 className="text-yellow-400 font-extrabold text-xl mb-2">مكافأة اليوم!</h3>
+              <div className="bg-yellow-500/10 rounded-2xl p-4 mb-4">
+                <div className="flex items-center justify-center gap-2">
+                  <span className="text-3xl">🪙</span>
+                  <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', delay: 0.3 }} className="text-3xl font-extrabold text-yellow-400">+{dailyBonusPopup.bonus}</motion.span>
+                </div>
+                {dailyBonusPopup.bonus > 30 && <div className="text-yellow-400/60 text-xs mt-1">🔥 مكافأة السلسلة المتتالية!</div>}
+              </div>
+              <GlowButton onClick={() => setDailyBonusPopup({ show: false, bonus: 0 })} className="w-full">🎉 شكراً!</GlowButton>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-full bg-gradient-to-br from-yellow-500/20 to-amber-600/20 flex items-center justify-center text-2xl border border-yellow-500/30">{playerAvatar}</div>
@@ -1082,6 +1172,24 @@ function WalletScreen() {
   const totalSpent = walletStore.getTotalSpent();
   const transactions = walletStore.getTransactions(20);
   const currentUser = useAuthStore.getState().currentUser;
+  const [copied, setCopied] = useState(false);
+  const [showReceiveCard, setShowReceiveCard] = useState(false);
+
+  // Check if daily bonus is available
+  const today = new Date().toDateString();
+  const dailyBonusAvailable = currentUser ? currentUser.lastBonusDate !== today : false;
+
+  const handleCopyId = () => {
+    if (!currentUser) return;
+    navigator.clipboard.writeText(currentUser.id).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {
+      // Fallback for environments where clipboard API isn't available
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
 
   const typeIcons: Record<string, string> = {
     earn: '🟢', spend: '🔴', transfer_in: '📥', transfer_out: '📤', bonus: '🎁', reward: '🏆',
@@ -1101,10 +1209,25 @@ function WalletScreen() {
 
   return (
     <motion.div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 p-4 pb-8" variants={pageVariants} initial="initial" animate="animate" exit="exit">
-      <div className="flex items-center gap-3 mb-6">
-        <motion.button whileTap={{ scale: 0.9 }} onClick={() => setScreen('menu')} className="text-white/60 hover:text-white text-2xl">→</motion.button>
-        <h2 className="text-xl font-bold text-white">💰 محفظتي</h2>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <motion.button whileTap={{ scale: 0.9 }} onClick={() => setScreen('menu')} className="text-white/60 hover:text-white text-2xl">→</motion.button>
+          <h2 className="text-xl font-bold text-white">💰 محفظتي</h2>
+        </div>
+        <CoinDisplay />
       </div>
+
+      {/* Daily Bonus Indicator */}
+      {dailyBonusAvailable && (
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+          className="bg-gradient-to-r from-yellow-500/20 to-amber-600/20 border border-yellow-500/30 rounded-2xl p-3 mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <motion.span animate={{ rotate: [0, 10, -10, 0] }} transition={{ duration: 1, repeat: Infinity }}>🎁</motion.span>
+            <span className="text-yellow-400 text-sm font-bold">مكافأة يومية متاحة!</span>
+          </div>
+          <button onClick={() => setScreen('menu')} className="text-yellow-400 text-xs font-bold hover:underline">ادخل القائمة</button>
+        </motion.div>
+      )}
 
       {/* Balance Cards */}
       <div className="grid grid-cols-2 gap-3 mb-5">
@@ -1129,29 +1252,51 @@ function WalletScreen() {
           <div className="text-2xl mb-1">📤</div>
           <div className="text-white/70 text-xs font-bold">إرسال</div>
         </motion.button>
-        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setShowReceiveCard(!showReceiveCard)}
           className="bg-white/5 border border-white/10 rounded-2xl p-3 text-center hover:bg-white/10 transition-colors">
           <div className="text-2xl mb-1">📥</div>
           <div className="text-white/70 text-xs font-bold">استلام</div>
         </motion.button>
-        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setScreen('spinWheel')}
           className="bg-white/5 border border-white/10 rounded-2xl p-3 text-center hover:bg-white/10 transition-colors">
-          <div className="text-2xl mb-1">📋</div>
-          <div className="text-white/70 text-xs font-bold">سجل المعاملات</div>
+          <div className="text-2xl mb-1">🎰</div>
+          <div className="text-white/70 text-xs font-bold">عجلة الحظ</div>
         </motion.button>
       </div>
 
-      {/* Receive Card */}
+      {/* Receive Card with Copy ID */}
       {currentUser && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
-          className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-5">
-          <div className="text-white/40 text-xs text-center mb-2">معرّفك للاستلام</div>
-          <div className="bg-white/5 rounded-xl p-3 text-center">
-            <span className="text-emerald-400 font-mono text-sm font-bold">{currentUser.id.slice(0, 12)}</span>
+          className="bg-gradient-to-br from-emerald-500/10 to-teal-600/10 border border-emerald-500/20 rounded-2xl p-4 mb-5">
+          <div className="text-white/50 text-xs text-center mb-2">معرّفك للاستلام</div>
+          <div className="bg-white/5 rounded-xl p-3 flex items-center gap-2">
+            <span className="text-emerald-400 font-mono text-sm font-bold flex-1 text-center">{currentUser.id.slice(0, 16)}</span>
+            <motion.button whileTap={{ scale: 0.9 }} onClick={handleCopyId}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${copied ? 'bg-emerald-500/30 text-emerald-400' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}>
+              {copied ? '✅ تم النسخ' : '📋 نسخ'}
+            </motion.button>
           </div>
           <div className="text-white/30 text-[10px] text-center mt-2">شارك هذا المعرّف مع الآخرين لاستلام التحويلات</div>
         </motion.div>
       )}
+
+      {/* Share/Receive Expandable Card */}
+      <AnimatePresence>
+        {showReceiveCard && currentUser && (
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+            className="bg-gradient-to-br from-emerald-500/5 to-teal-500/5 border border-emerald-500/20 rounded-2xl p-4 mb-5 overflow-hidden">
+            <div className="text-center">
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-yellow-500/20 to-amber-600/20 flex items-center justify-center text-3xl border border-yellow-500/30 mx-auto mb-3">{currentUser.avatar}</div>
+              <div className="text-white font-bold">{currentUser.name}</div>
+              <div className="text-emerald-400/60 text-xs font-mono mt-1">ID: {currentUser.id.slice(0, 16)}</div>
+              <div className="text-white/30 text-[10px] mt-3">أرسل هذا المعرّف لصديقك ليتمكن من التحويل إليك</div>
+              <GlowButton onClick={handleCopyId} className="mt-3 text-sm px-6 py-2">
+                {copied ? '✅ تم النسخ!' : '📋 نسخ المعرّف'}
+              </GlowButton>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Summary Stats */}
       <div className="grid grid-cols-2 gap-3 mb-5">
@@ -1169,11 +1314,12 @@ function WalletScreen() {
       <div className="mb-4">
         <div className="text-white/50 text-sm font-bold mb-3">📋 آخر المعاملات</div>
         {transactions.length === 0 ? (
-          <div className="bg-white/5 rounded-2xl p-6 text-center">
-            <div className="text-3xl mb-2">📭</div>
-            <div className="text-white/30 text-sm">لا توجد معاملات بعد</div>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-white/5 rounded-2xl p-8 text-center">
+            <motion.div animate={{ y: [0, -5, 0] }} transition={{ duration: 2, repeat: Infinity }} className="text-4xl mb-3">📭</motion.div>
+            <div className="text-white/40 text-sm font-bold">لا توجد معاملات بعد</div>
             <div className="text-white/20 text-xs mt-1">العب ألعاباً لكسب العملات!</div>
-          </div>
+            <GlowButton onClick={() => setScreen('modeSelect')} className="mt-4 text-sm px-6 py-2">🎮 ابدأ اللعب</GlowButton>
+          </motion.div>
         ) : (
           <div className="space-y-2 max-h-96 overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
             {transactions.map((tx, i) => (
@@ -1209,18 +1355,33 @@ function TransferScreen() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [transferResult, setTransferResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isTransferring, setIsTransferring] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
 
+  const currentUser = useAuthStore.getState().currentUser;
   const allUsers = useAuthStore.getState().getAllUsers();
+  const recentTransfers = useWalletStore.getState().getTransactions(10).filter(t => t.type === 'transfer_out');
   const filteredUsers = searchQuery.trim()
     ? allUsers.filter(u => u.name.includes(searchQuery) || u.email.includes(searchQuery))
     : allUsers;
 
+  const quickAmounts = [50, 100, 200, 500];
   const feeRate = currency === 'coins' ? 0.05 : 0.10;
   const amountNum = parseInt(amount) || 0;
   const fee = amountNum > 0 ? Math.ceil(amountNum * feeRate) : 0;
   const totalDeducted = amountNum + fee;
   const currentBalance = currency === 'coins' ? playerCoins : playerGems;
   const canAfford = amountNum >= 10 && totalDeducted <= currentBalance;
+
+  const handleCopyMyId = () => {
+    if (!currentUser) return;
+    navigator.clipboard.writeText(currentUser.id).then(() => {
+      setCopiedId(true);
+      setTimeout(() => setCopiedId(false), 2000);
+    }).catch(() => {
+      setCopiedId(true);
+      setTimeout(() => setCopiedId(false), 2000);
+    });
+  };
 
   const handleTransfer = async () => {
     if (!selectedUser || amountNum <= 0) return;
@@ -1254,10 +1415,25 @@ function TransferScreen() {
 
   return (
     <motion.div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 p-4 pb-8" variants={pageVariants} initial="initial" animate="animate" exit="exit">
-      <div className="flex items-center gap-3 mb-6">
-        <motion.button whileTap={{ scale: 0.9 }} onClick={() => setScreen('wallet')} className="text-white/60 hover:text-white text-2xl">→</motion.button>
-        <h2 className="text-xl font-bold text-white">📤 تحويل</h2>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <motion.button whileTap={{ scale: 0.9 }} onClick={() => setScreen('wallet')} className="text-white/60 hover:text-white text-2xl">→</motion.button>
+          <h2 className="text-xl font-bold text-white">📤 تحويل</h2>
+        </div>
+        <CoinDisplay />
       </div>
+
+      {/* Copy Your ID */}
+      {currentUser && (
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+          className="bg-gradient-to-r from-emerald-500/10 to-teal-600/10 border border-emerald-500/20 rounded-xl p-3 mb-4 flex items-center justify-between">
+          <div className="text-emerald-400/70 text-xs">معرّفك: <span className="font-mono font-bold">{currentUser.id.slice(0, 12)}</span></div>
+          <motion.button whileTap={{ scale: 0.9 }} onClick={handleCopyMyId}
+            className={`px-3 py-1 rounded-lg text-xs font-bold ${copiedId ? 'bg-emerald-500/30 text-emerald-400' : 'bg-white/10 text-white/60'}`}>
+            {copiedId ? '✅ تم النسخ' : '📋 نسخ'}
+          </motion.button>
+        </motion.div>
+      )}
 
       {/* Select Recipient */}
       <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
@@ -1265,8 +1441,8 @@ function TransferScreen() {
         {selectedUser ? (
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
             className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500/20 to-teal-600/20 flex items-center justify-center text-xl border border-emerald-500/30">{selectedUser.avatar}</div>
-            <div className="flex-1"><div className="text-emerald-400 font-bold text-sm">{selectedUser.name}</div><div className="text-white/30 text-[10px]">تم الاختيار</div></div>
+            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-emerald-500/20 to-teal-600/20 flex items-center justify-center text-3xl border border-emerald-500/30">{selectedUser.avatar}</div>
+            <div className="flex-1"><div className="text-emerald-400 font-bold">{selectedUser.name}</div><div className="text-white/30 text-[10px]">تم الاختيار</div></div>
             <button onClick={() => setSelectedUser(null)} className="text-white/40 hover:text-red-400 text-lg">✕</button>
           </motion.div>
         ) : (
@@ -1280,7 +1456,7 @@ function TransferScreen() {
                 filteredUsers.slice(0, 10).map(user => (
                   <motion.button key={user.id} whileTap={{ scale: 0.98 }} onClick={() => setSelectedUser({ id: user.id, name: user.name, avatar: user.avatar })}
                     className="w-full bg-white/5 rounded-xl p-3 flex items-center gap-3 hover:bg-white/10 transition-colors text-right">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center text-sm border border-white/10">{user.avatar}</div>
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center text-lg border border-white/10">{user.avatar}</div>
                     <div className="flex-1"><div className="text-white/80 text-sm font-medium">{user.name}</div><div className="text-white/30 text-[10px]">{user.email}</div></div>
                     <span className="text-white/20">‹</span>
                   </motion.button>
@@ -1300,6 +1476,15 @@ function TransferScreen() {
               className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${currency === c ? (c === 'coins' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' : 'bg-purple-500/20 text-purple-400 border border-purple-500/30') : 'bg-white/5 text-white/40'}`}>
               {c === 'coins' ? '🪙 عملات' : '💎 جواهر'}
             </button>
+          ))}
+        </div>
+        {/* Quick Amount Buttons */}
+        <div className="flex gap-2 mb-3">
+          {quickAmounts.map(qa => (
+            <motion.button key={qa} whileTap={{ scale: 0.95 }} onClick={() => setAmount(String(qa))}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${amount === String(qa) ? (currency === 'coins' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' : 'bg-purple-500/20 text-purple-400 border border-purple-500/30') : 'bg-white/5 text-white/40 hover:bg-white/10'}`}>
+              {qa}
+            </motion.button>
           ))}
         </div>
         <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))} placeholder="أدخل المبلغ" dir="ltr" type="number"
@@ -1329,6 +1514,22 @@ function TransferScreen() {
         </motion.div>
       )}
 
+      {/* Recent Transfers */}
+      {recentTransfers.length > 0 && !selectedUser && (
+        <div className="mb-4">
+          <div className="text-white/50 text-sm font-bold mb-2">📋 آخر التحويلات</div>
+          <div className="space-y-1">
+            {recentTransfers.slice(0, 3).map(tx => (
+              <div key={tx.id} className="bg-white/5 rounded-xl p-2.5 flex items-center gap-2">
+                <span className="text-sm">📤</span>
+                <span className="text-white/60 text-xs flex-1 truncate">{tx.description}</span>
+                <span className="text-red-400 text-xs font-bold">-{tx.amount}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Transfer Button */}
       <GlowButton onClick={() => setShowConfirm(true)} disabled={!selectedUser || !canAfford || amountNum < 10} className="w-full mb-4">
         {isTransferring ? '⏳ جارٍ التحويل...' : '📤 تحويل الآن'}
@@ -1339,15 +1540,17 @@ function TransferScreen() {
         {showConfirm && selectedUser && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setShowConfirm(false)}>
-            <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }}
+            <motion.div initial={{ scale: 0.8, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.8, opacity: 0, y: 20 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-gray-900 border border-white/10 rounded-2xl p-6 w-full max-w-sm text-center">
-              <div className="text-4xl mb-3">⚠️</div>
-              <h3 className="text-white font-bold text-lg mb-2">تأكيد التحويل</h3>
-              <p className="text-white/60 text-sm mb-4">
-                هل تريد تحويل <span className="text-yellow-400 font-bold">{amountNum}</span> {currency === 'coins' ? 'عملة' : 'جوهرة'} إلى <span className="text-emerald-400 font-bold">{selectedUser.name}</span>؟
-              </p>
-              <p className="text-white/40 text-xs mb-4">شامل الرسوم: {totalDeducted} {currency === 'coins' ? '🪙' : '💎'}</p>
+              className="bg-gradient-to-b from-gray-900 to-gray-950 border border-white/10 rounded-2xl p-6 w-full max-w-sm text-center">
+              <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.1, type: 'spring' }} className="w-16 h-16 rounded-full bg-gradient-to-br from-yellow-500/20 to-amber-600/20 flex items-center justify-center text-3xl border border-yellow-500/30 mx-auto mb-3">{selectedUser.avatar}</motion.div>
+              <div className="text-white/40 text-xs mb-1">تحويل إلى</div>
+              <div className="text-white font-bold text-lg mb-3">{selectedUser.name}</div>
+              <div className="bg-white/5 rounded-xl p-4 mb-4">
+                <div className="text-3xl font-extrabold text-white mb-1">{amountNum.toLocaleString()} {currency === 'coins' ? '🪙' : '💎'}</div>
+                <div className="text-white/30 text-xs">+ {fee} رسوم = {totalDeducted} إجمالي</div>
+              </div>
               <div className="flex gap-3">
                 <GlowButton onClick={handleTransfer} className="flex-1" disabled={isTransferring}>
                   {isTransferring ? '⏳...' : '✅ تأكيد'}

@@ -102,7 +102,7 @@ function SplashScreen() {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}>
         <GlowButton onClick={() => setScreen('login')} className="text-lg px-12 py-4">🚀 ابدأ المغامرة</GlowButton>
       </motion.div>
-      <motion.p className="text-xs text-white/20 mt-8" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}>الإصدار 3.0 — لوحة تحكم متقدمة وأكثر من 120 سؤال</motion.p>
+      <motion.p className="text-xs text-white/20 mt-8" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}>الإصدار 3.1 — إطلاق رسمي على Google Play</motion.p>
     </motion.div>
   );
 }
@@ -248,8 +248,9 @@ function LoginScreen() {
 
 // ===== Main Menu =====
 function MainMenu() {
-  const { setScreen, playerName, playerAvatar, totalScore, gamesPlayed, currentStreak, bestStreak, dailyCompleted, isAdmin, playerCoins, playerGems } = useGameStore();
+  const { setScreen, playerName, playerAvatar, totalScore, gamesPlayed, currentStreak, bestStreak, dailyCompleted, isAdmin, playerCoins, playerGems, announcements } = useGameStore();
   const [dailyBonusPopup, setDailyBonusPopup] = useState<{ show: boolean; bonus: number }>({ show: false, bonus: 0 });
+  const [dismissedAnnouncements, setDismissedAnnouncements] = useState<Set<string>>(new Set());
   const today = new Date().toLocaleDateString('ar');
 
   // Check daily bonus on mount
@@ -303,6 +304,30 @@ function MainMenu() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Active Announcements */}
+      {announcements.filter(a => a.isActive && !dismissedAnnouncements.has(a.id)).length > 0 && (
+        <div className="space-y-2 mb-4">
+          {announcements.filter(a => a.isActive && !dismissedAnnouncements.has(a.id)).map(ann => (
+            <motion.div key={ann.id} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+              className={`rounded-2xl p-3 border relative ${
+                ann.type === 'warning' ? 'bg-orange-500/10 border-orange-500/30' :
+                ann.type === 'reward' ? 'bg-emerald-500/10 border-emerald-500/30' :
+                'bg-blue-500/10 border-blue-500/30'
+              }`}>
+              <button onClick={() => setDismissedAnnouncements(prev => new Set(prev).add(ann.id))}
+                className="absolute top-2 left-2 text-white/30 hover:text-white/60 text-xs">✕</button>
+              <div className="flex items-start gap-2 pr-4">
+                <span className="text-lg mt-0.5">{ann.type === 'info' ? 'ℹ️' : ann.type === 'warning' ? '⚠️' : '🎁'}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-white font-bold text-xs">{ann.title}</div>
+                  <div className="text-white/50 text-[10px] mt-0.5">{ann.message}</div>
+                </div>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      )}
 
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
@@ -916,7 +941,12 @@ function SettingsScreen() {
       <div className="mt-6 space-y-3">
         <button className="w-full flex items-center gap-3 p-4 bg-white/5 rounded-xl text-white/60 hover:text-white transition-all"><span>⭐</span><span className="text-sm">قيّم التطبيق</span></button>
         <button className="w-full flex items-center gap-3 p-4 bg-white/5 rounded-xl text-white/60 hover:text-white transition-all"><span>📤</span><span className="text-sm">شارك التطبيق</span></button>
+        <button onClick={() => setScreen('privacy')} className="w-full flex items-center gap-3 p-4 bg-white/5 rounded-xl text-white/60 hover:text-white transition-all"><span>📜</span><span className="text-sm">سياسة الخصوصية</span></button>
         <button className="w-full flex items-center gap-3 p-4 bg-white/5 rounded-xl text-white/60 hover:text-white transition-all"><span>ℹ️</span><span className="text-sm">حول التطبيق</span></button>
+      </div>
+      <div className="mt-4 text-center">
+        <p className="text-white/20 text-[10px]">بطل الأسئلة - الإصدار 3.1.0</p>
+        <p className="text-white/15 text-[10px]">com.quizchampion.game</p>
       </div>
       {isLoggedIn && <GlowButton onClick={() => { useAuthStore.getState().logout(); logout(); }} variant="danger" className="w-full mt-6">🚪 تسجيل الخروج</GlowButton>}
     </motion.div>
@@ -1101,6 +1131,11 @@ function AdminScreen() {
   // Edit user form
   const [editForm, setEditForm] = useState({ name: '', email: '', coins: 0, gems: 0, level: 1, role: 'user' as 'user' | 'admin' });
 
+  // Reset password states
+  const [resetPwModal, setResetPwModal] = useState(false);
+  const [resetPwUserId, setResetPwUserId] = useState<string | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+
   // Question management states
   const [showAddQuestion, setShowAddQuestion] = useState(false);
   const [newQ, setNewQ] = useState({ text: '', option1: '', option2: '', option3: '', option4: '', correctIndex: 0, category: 'science' as QuestionCategory, difficulty: 'easy' as 'easy' | 'medium' | 'hard' | 'expert', hint: '', funFact: '', points: 100, timeLimit: 20 });
@@ -1108,6 +1143,9 @@ function AdminScreen() {
   // Bulk operations states
   const [bulkBonusAmount, setBulkBonusAmount] = useState(50);
   const [bulkBonusCurrency, setBulkBonusCurrency] = useState<'coins' | 'gems'>('coins');
+
+  // Import ref
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   if (!isAdmin) { setScreen('menu'); return null; }
 
@@ -1247,6 +1285,84 @@ function AdminScreen() {
     showToast('تم تصدير البيانات بنجاح');
   };
 
+  const handleImportData = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string);
+        if (Array.isArray(data)) {
+          // Detect data type from first item
+          const first = data[0];
+          if (first && first.email && first.name) {
+            // Users import - merge: add users that don't exist by email
+            let addedCount = 0;
+            let skippedCount = 0;
+            const existingEmails = new Set(allUsers.map(u => u.email.toLowerCase()));
+            data.forEach((u: any) => {
+              if (u.email && !existingEmails.has(u.email.toLowerCase())) {
+                authStore.setState(prev => ({
+                  users: [...prev.users, {
+                    id: u.id || `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                    email: u.email.toLowerCase(),
+                    name: u.name || 'مستخدم',
+                    password: u.password || '',
+                    avatar: u.avatar || '🦁',
+                    role: u.role || 'user',
+                    level: u.level || 1,
+                    coins: u.coins || 0,
+                    gems: u.gems || 0,
+                    provider: u.provider || 'email',
+                    createdAt: u.createdAt || new Date().toISOString(),
+                  }],
+                }));
+                addedCount++;
+              } else {
+                skippedCount++;
+              }
+            });
+            showToast(`تم استيراد ${addedCount} مستخدم (${skippedCount} موجود مسبقاً)`);
+            forceUpdate(n => n + 1);
+          } else if (first && first.text && first.options && first.correctIndex !== undefined) {
+            // Questions import - merge with existing custom questions
+            let addedCount = 0;
+            data.forEach((q: any) => {
+              const exists = customQuestions.some((cq: any) => cq.text === q.text);
+              if (!exists) {
+                addCustomQuestion({
+                  id: q.id || `cq-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                  text: q.text,
+                  options: q.options,
+                  correctIndex: q.correctIndex,
+                  category: q.category || 'science',
+                  difficulty: q.difficulty || 'easy',
+                  hint: q.hint || 'لا يوجد تلميح',
+                  funFact: q.funFact || '',
+                  points: q.points || 100,
+                  timeLimit: q.timeLimit || 20,
+                  isUserSubmitted: true,
+                  qualityScore: 100,
+                });
+                addedCount++;
+              }
+            });
+            showToast(`تم استيراد ${addedCount} سؤال جديد`);
+          } else {
+            showToast('صيغة الملف غير معروفة', 'error');
+          }
+        } else {
+          showToast('الملف لا يحتوي على مصفوفة بيانات صالحة', 'error');
+        }
+      } catch {
+        showToast('خطأ في قراءة الملف - تأكد من صيغة JSON', 'error');
+      }
+    };
+    reader.readAsText(file);
+    // Reset the file input so the same file can be selected again
+    event.target.value = '';
+  };
+
   const tabItems = [
     { id: 'stats' as const, icon: '📊', label: 'الإحصائيات' },
     { id: 'users' as const, icon: '👥', label: 'المستخدمين' },
@@ -1273,6 +1389,8 @@ function AdminScreen() {
         <h2 className="text-xl font-bold text-white">👑 لوحة التحكم</h2>
         <div className="flex-1" />
         <button onClick={() => { handleExportData('users'); }} className="text-[10px] bg-blue-500/20 text-blue-400 px-2 py-1 rounded-lg">📥 تصدير</button>
+        <button onClick={() => importFileRef.current?.click()} className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded-lg">📤 استيراد</button>
+        <input ref={importFileRef} type="file" accept=".json" className="hidden" onChange={handleImportData} />
       </div>
 
       {/* Tabs */}
@@ -1374,6 +1492,8 @@ function AdminScreen() {
                         className="text-[10px] bg-blue-500/20 text-blue-400 px-2 py-1 rounded-lg hover:bg-blue-500/30">✏️ تعديل</button>
                       {user.role !== 'admin' && (
                         <>
+                          <button onClick={() => { setResetPwUserId(user.id); setNewPassword(''); setResetPwModal(true); }}
+                            className="text-[10px] bg-amber-500/20 text-amber-400 px-2 py-1 rounded-lg hover:bg-amber-500/30">🔑 كلمة المرور</button>
                           {user.banned ? (
                             <button onClick={() => { authStore.getState().unbanUser(user.id); showToast('تم إلغاء الحظر'); forceUpdate(n => n + 1); }}
                               className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded-lg hover:bg-emerald-500/30">✅ فك</button>
@@ -1570,7 +1690,7 @@ function AdminScreen() {
           </div>
 
           <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 text-center">
-            <span className="text-yellow-400 text-xs">⚠️ الإعلانات تظهر فقط عند تسجيل الدخول بحساب المسؤول للمعاينة</span>
+            <span className="text-yellow-400 text-xs">📢 الإعلانات النشطة تظهر لجميع المستخدمين في القائمة الرئيسية</span>
           </div>
         </div>
       )}
@@ -1658,8 +1778,8 @@ function AdminScreen() {
 
           {/* Export Data */}
           <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-            <div className="text-white/50 text-sm font-bold mb-3">📥 تصدير البيانات</div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="text-white/50 text-sm font-bold mb-3">📥 تصدير واستيراد البيانات</div>
+            <div className="grid grid-cols-2 gap-3 mb-3">
               <button onClick={() => handleExportData('users')} className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 text-center hover:bg-blue-500/20 transition-all">
                 <span className="text-2xl block mb-1">👥</span>
                 <span className="text-blue-400 text-xs font-bold">تصدير المستخدمين</span>
@@ -1667,6 +1787,24 @@ function AdminScreen() {
               <button onClick={() => handleExportData('transactions')} className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-center hover:bg-emerald-500/20 transition-all">
                 <span className="text-2xl block mb-1">💰</span>
                 <span className="text-emerald-400 text-xs font-bold">تصدير المعاملات</span>
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <button onClick={() => importFileRef.current?.click()} className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-center hover:bg-amber-500/20 transition-all">
+                <span className="text-2xl block mb-1">📤</span>
+                <span className="text-amber-400 text-xs font-bold">استيراد مستخدمين/أسئلة</span>
+              </button>
+              <button onClick={() => {
+                const questionsData = customQuestions;
+                const blob = new Blob([JSON.stringify(questionsData, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = 'quiz-champion-questions.json'; a.click();
+                URL.revokeObjectURL(url);
+                showToast('تم تصدير الأسئلة بنجاح');
+              }} className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-3 text-center hover:bg-purple-500/20 transition-all">
+                <span className="text-2xl block mb-1">❓</span>
+                <span className="text-purple-400 text-xs font-bold">تصدير الأسئلة</span>
               </button>
             </div>
           </div>
@@ -1809,6 +1947,42 @@ function AdminScreen() {
             </div>
           </div>
 
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+            <div className="text-white/50 text-sm font-bold mb-4">📱 إدارة التطبيق</div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-white/60 text-sm">الحد الأدنى لإصدار التطبيق</span>
+                <input value={adminSettings.minAppVersion} onChange={(e) => updateAdminSettings({ minAppVersion: e.target.value })} dir="ltr"
+                  className="w-24 bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 text-white text-center text-sm focus:border-yellow-500/50 focus:outline-none" placeholder="3.0.0" />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-white/60 text-sm">فرض التحديث</span>
+                <button onClick={() => updateAdminSettings({ forceUpdate: !adminSettings.forceUpdate })}
+                  className={`w-12 h-7 rounded-full transition-all relative ${adminSettings.forceUpdate ? 'bg-emerald-500' : 'bg-white/10'}`}>
+                  <div className={`w-5 h-5 rounded-full bg-white absolute top-1 transition-all ${adminSettings.forceUpdate ? 'left-1' : 'right-1'}`} />
+                </button>
+              </div>
+              <div className="border-t border-white/5 pt-3 mt-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-white/60 text-sm">وضع الصيانة</span>
+                  <button onClick={() => updateAdminSettings({ maintenanceMode: !adminSettings.maintenanceMode })}
+                    className={`w-12 h-7 rounded-full transition-all relative ${adminSettings.maintenanceMode ? 'bg-red-500' : 'bg-white/10'}`}>
+                    <div className={`w-5 h-5 rounded-full bg-white absolute top-1 transition-all ${adminSettings.maintenanceMode ? 'left-1' : 'right-1'}`} />
+                  </button>
+                </div>
+                {adminSettings.maintenanceMode && (
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="mt-3">
+                    <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-2 text-center mb-2">
+                      <span className="text-red-400 text-[10px]">⚠️ التطبيق في وضع الصيانة - المستخدمون يرون شاشة الصيانة</span>
+                    </div>
+                    <input value={adminSettings.maintenanceMessage} onChange={(e) => updateAdminSettings({ maintenanceMessage: e.target.value })} placeholder="رسالة الصيانة" dir="rtl"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white placeholder:text-white/30 focus:border-yellow-500/50 focus:outline-none text-sm" />
+                  </motion.div>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="bg-red-500/5 border border-red-500/10 rounded-2xl p-4">
             <div className="text-red-400/70 text-sm font-bold mb-3">⚠️ منطقة الخطر</div>
             <GlowButton variant="danger" className="w-full text-sm"
@@ -1818,6 +1992,7 @@ function AdminScreen() {
                     welcomeCoins: 150, welcomeGems: 8, dailyBonusCoins: 30,
                     transferFeeCoins: 5, transferFeeGems: 10, minTransferAmount: 10,
                     coinRewardPerGame: 5, gemRewardPerfect: 3, xpMultiplier: 1,
+                    minAppVersion: '3.0.0', forceUpdate: false, maintenanceMode: false, maintenanceMessage: 'صيانة المؤقتة، نعود قريباً!',
                   });
                   showToast('تم إعادة ضبط الإعدادات');
                 }
@@ -1998,6 +2173,39 @@ function AdminScreen() {
               <div className="flex gap-3">
                 <GlowButton onClick={handleBanUser} variant="danger" className="flex-1 text-sm">🚫 حظر</GlowButton>
                 <GlowButton onClick={() => { setBanModal(false); setBanReason(''); }} variant="outline" className="flex-1 text-sm">إلغاء</GlowButton>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Reset Password Modal */}
+      <AnimatePresence>
+        {resetPwModal && resetPwUserId && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => { setResetPwModal(false); setResetPwUserId(null); setNewPassword(''); }}>
+            <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-gray-900 border border-amber-500/20 rounded-2xl p-5 w-full max-w-sm text-center">
+              <div className="text-4xl mb-3">🔑</div>
+              <h3 className="text-white font-bold text-lg mb-2">إعادة كلمة المرور</h3>
+              {(() => {
+                const u = allUsers.find(u => u.id === resetPwUserId);
+                return u ? <p className="text-white/60 text-sm mb-3">تعيين كلمة مرور جديدة لـ <span className="text-amber-400 font-bold">{u.name}</span></p> : null;
+              })()}
+              <input value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="كلمة المرور الجديدة (6 أحرف على الأقل)" type="text" dir="ltr"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:border-amber-500/50 focus:outline-none text-sm mb-4" />
+              <div className="flex gap-3">
+                <GlowButton onClick={() => {
+                  const result = authStore.getState().resetUserPassword(resetPwUserId, newPassword);
+                  if (result.success) {
+                    showToast('تم إعادة تعيين كلمة المرور بنجاح');
+                    setResetPwModal(false); setResetPwUserId(null); setNewPassword('');
+                  } else {
+                    showToast(result.error || 'فشل إعادة التعيين', 'error');
+                  }
+                }} className="flex-1 text-sm">🔑 إعادة التعيين</GlowButton>
+                <GlowButton onClick={() => { setResetPwModal(false); setResetPwUserId(null); setNewPassword(''); }} variant="outline" className="flex-1 text-sm">إلغاء</GlowButton>
               </div>
             </motion.div>
           </motion.div>
@@ -2482,8 +2690,108 @@ function TransferScreen() {
 }
 
 // ===== Main App =====
+// ===== Maintenance Screen =====
+// ===== Privacy Policy Screen =====
+function PrivacyPolicyScreen() {
+  const { setScreen } = useGameStore();
+  return (
+    <motion.div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 p-4 pb-8" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+      <div className="flex items-center gap-3 mb-6">
+        <motion.button whileTap={{ scale: 0.9 }} onClick={() => setScreen('settings')} className="text-white/60 hover:text-white text-2xl">→</motion.button>
+        <h2 className="text-xl font-bold text-white">📜 سياسة الخصوصية</h2>
+      </div>
+      <div className="space-y-4 text-white/70 text-sm leading-relaxed">
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+          <h3 className="text-yellow-400 font-bold text-base mb-2">1. مقدمة</h3>
+          <p>مرحباً بك في تطبيق "بطل الأسئلة". نحن نحترم خصوصيتك ونلتزم بحماية بياناتك الشخصية. توضح سياسة الخصوصية هذه كيفية جمع واستخدام وحماية المعلومات عند استخدامك لتطبيقنا. باستخدامك للتطبيق، فإنك توافق على الشروط الموضحة في هذه السياسة.</p>
+        </div>
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+          <h3 className="text-yellow-400 font-bold text-base mb-2">2. المعلومات التي نجمعها</h3>
+          <p className="mb-2">يقوم التطبيق بتخزين البيانات التالية محلياً على جهازك فقط:</p>
+          <ul className="list-disc pr-5 space-y-1 text-white/60">
+            <li>الاسم والبريد الإلكتروني عند التسجيل</li>
+            <li>تقدمك في اللعبة (المستوى، النقاط، العملات، الجواهر)</li>
+            <li>سجل المعاملات المالية داخل التطبيق</li>
+            <li>إعدادات التطبيق المفضلة</li>
+          </ul>
+          <p className="mt-2 text-emerald-400/80 text-xs">✅ لا نقوم بإرسال أي بيانات إلى خوادم خارجية. جميع البيانات مخزنة محلياً على جهازك.</p>
+        </div>
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+          <h3 className="text-yellow-400 font-bold text-base mb-2">3. كيف نستخدم المعلومات</h3>
+          <p>نستخدم المعلومات المخزنة محلياً حصرياً لتوفير تجربة اللعب وتحسينها، بما في ذلك: حفظ تقدمك في اللعبة، وإدارة حسابك والمحفظة الافتراضية، وعرض لوحة المتصدرين والإنجازات، وتخصيص تجربة المستخدم. لا يتم مشاركة أي معلومات مع أطراف ثالثة.</p>
+        </div>
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+          <h3 className="text-yellow-400 font-bold text-base mb-2">4. حماية البيانات</h3>
+          <p>نظراً لأن جميع بياناتك مخزنة محلياً على جهازك، فإن حماية هذه البيانات تعتمد على إجراءات أمان جهازك نفسه. نوصي بتعيين قفل شاشة وتحديث نظام التشغيل بانتظام. يرجى ملاحظة أن إلغاء تثبيت التطبيق أو مسح بيانات التطبيق سيؤدي إلى حذف جميع بيانات اللعبة بشكل دائم.</p>
+        </div>
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+          <h3 className="text-yellow-400 font-bold text-base mb-2">5. الأطفال والخصوصية</h3>
+          <p>تطبيق "بطل الأسئلة" مناسب لجميع الأعمار. لا نقوم بجمع معلومات شخصية من الأطفال عمداً. بما أن البيانات مخزنة محلياً فقط ولا يتم إرسالها لأي خادم، فإننا لا نحتاج للوصول إلى بيانات الأطفال. نشجع أولياء الأمور على مراقبة استخدام أطفالهم للتطبيق.</p>
+        </div>
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+          <h3 className="text-yellow-400 font-bold text-base mb-2">6. العملات الافتراضية</h3>
+          <p>العملات والجواهر الموجودة في التطبيق هي عملات افتراضية ليس لها قيمة حقيقية ولا يمكن استبدالها بأموال حقيقية. عمليات الشراء داخل التطبيق (إن وجدت) تخضع لسياسات متجر Google Play. جميع المعاملات بين المستخدمين هي معاملات افتراضية داخل اللعبة فقط.</p>
+        </div>
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+          <h3 className="text-yellow-400 font-bold text-base mb-2">7. الإعلانات</h3>
+          <p>قد يحتوي التطبيق على إعلانات من أطراف ثالثة عبر خدمات Google AdMob. تخضع هذه الإعلانات لسياسة خصوصية Google الخاصة بها. يمكنك الاطلاع على سياسة خصوصية Google على موقعهم الرسمي.</p>
+        </div>
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+          <h3 className="text-yellow-400 font-bold text-base mb-2">8. تغييرات السياسة</h3>
+          <p>قد نقوم بتحديث سياسة الخصوصية هذه من وقت لآخر. سيتم إعلامك بأي تغييرات جوهرية عبر إشعار داخل التطبيق. استمرارك في استخدام التطبيق بعد نشر التغييرات يعني موافقتك على السياسة المحدثة.</p>
+        </div>
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+          <h3 className="text-yellow-400 font-bold text-base mb-2">9. الاتصال بنا</h3>
+          <p>إذا كان لديك أي أسئلة أو استفسارات حول سياسة الخصوصية أو معالجة البيانات، يمكنك التواصل معنا عبر البريد الإلكتروني: admin@quizchampion.com</p>
+        </div>
+        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 text-center text-yellow-400/70 text-xs">
+          آخر تحديث: أبريل 2026 | الإصدار 3.1.0
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function MaintenanceScreen({ message }: { message: string }) {
+  return (
+    <motion.div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 flex flex-col items-center justify-center p-6 text-center"
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+      <motion.div
+        animate={{ rotate: [0, 15, -15, 0], scale: [1, 1.1, 1] }}
+        transition={{ duration: 2, repeat: Infinity, repeatDelay: 1 }}
+        className="text-8xl mb-8">
+        🔧
+      </motion.div>
+      <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+        className="text-3xl font-extrabold text-white mb-4">صيانة المؤقتة</motion.h1>
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
+        className="bg-white/5 border border-white/10 rounded-3xl p-6 max-w-sm w-full mb-6">
+        <p className="text-white/70 text-lg leading-relaxed">{message}</p>
+      </motion.div>
+      <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }}
+        className="text-white/30 text-sm">نعتذر عن الإزعاج، سنعود قريباً! 🙏</motion.p>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}
+        className="mt-8 flex items-center gap-2">
+        <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 1.5, repeat: Infinity }} className="w-2 h-2 rounded-full bg-yellow-500" />
+        <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 1.5, repeat: Infinity, delay: 0.3 }} className="w-2 h-2 rounded-full bg-yellow-500" />
+        <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 1.5, repeat: Infinity, delay: 0.6 }} className="w-2 h-2 rounded-full bg-yellow-500" />
+      </motion.div>
+    </motion.div>
+  );
+}
+
 export default function Home() {
-  const { currentScreen } = useGameStore();
+  const { currentScreen, adminSettings, isAdmin } = useGameStore();
+
+  // Maintenance mode check: show maintenance screen to non-admin users
+  if (adminSettings.maintenanceMode && !isAdmin) {
+    return (
+      <main className="min-h-screen" dir="rtl" lang="ar">
+        <MaintenanceScreen message={adminSettings.maintenanceMessage} />
+      </main>
+    );
+  }
+
   const renderScreen = () => {
     switch (currentScreen) {
       case 'splash': return <SplashScreen />;
@@ -2506,6 +2814,7 @@ export default function Home() {
       case 'admin': return <AdminScreen />;
       case 'wallet': return <WalletScreen />;
       case 'transfer': return <TransferScreen />;
+      case 'privacy': return <PrivacyPolicyScreen />;
       default: return <MainMenu />;
     }
   };

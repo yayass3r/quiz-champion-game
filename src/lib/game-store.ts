@@ -26,7 +26,8 @@ export type GameScreen =
   | 'packages'
   | 'submitQuestion'
   | 'wallet'
-  | 'transfer';
+  | 'transfer'
+  | 'privacy';
 
 export interface PowerUp {
   id: string; name: string; icon: string; description: string; count: number; cost: number;
@@ -63,6 +64,7 @@ export interface Announcement {
 export interface AdminSettings {
   welcomeCoins: number; welcomeGems: number; dailyBonusCoins: number; transferFeeCoins: number; transferFeeGems: number;
   minTransferAmount: number; coinRewardPerGame: number; gemRewardPerfect: number; xpMultiplier: number;
+  minAppVersion: string; forceUpdate: boolean; maintenanceMode: boolean; maintenanceMessage: string;
 }
 
 export interface AuthUser {
@@ -227,6 +229,7 @@ export const useGameStore = create<GameState>()(
         welcomeCoins: 150, welcomeGems: 8, dailyBonusCoins: 30,
         transferFeeCoins: 5, transferFeeGems: 10, minTransferAmount: 10,
         coinRewardPerGame: 5, gemRewardPerfect: 3, xpMultiplier: 1,
+        minAppVersion: '3.0.0', forceUpdate: false, maintenanceMode: false, maintenanceMessage: 'صيانة المؤقتة، نعود قريباً!',
       },
       lastQuestionScore: null, lastQuestionFeedback: '',
       customQuestions: [],

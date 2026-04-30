@@ -49,6 +49,7 @@ interface AuthState {
   banUser: (userId: string, reason: string) => { success: boolean; error?: string };
   unbanUser: (userId: string) => { success: boolean; error?: string };
   getAllUsersIncludingAdmin: () => LocalUser[];
+  resetUserPassword: (userId: string, newPassword: string) => { success: boolean; error?: string };
 }
 
 // Simple hash for password (not cryptographically secure, but works for local storage)
@@ -311,6 +312,21 @@ export const useAuthStore = create<AuthState>()(
 
       getAllUsersIncludingAdmin: () => {
         return get().users;
+      },
+
+      resetUserPassword: (userId, newPassword) => {
+        const { users } = get();
+        const targetUser = users.find(u => u.id === userId);
+        if (!targetUser) return { success: false, error: 'المستخدم غير موجود' };
+        if (targetUser.role === 'admin') return { success: false, error: 'لا يمكن إعادة تعيين كلمة مرور المسؤول' };
+        if (!newPassword || newPassword.length < 6) return { success: false, error: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' };
+
+        const hashedPassword = simpleHash(newPassword);
+        const updatedUsers = users.map(u =>
+          u.id === userId ? { ...u, password: hashedPassword } : u
+        );
+        set({ users: updatedUsers });
+        return { success: true };
       },
     }),
     {

@@ -4,6 +4,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore, AdConfig } from '@/lib/game-store';
 import { useAuthStore } from '@/lib/auth-local';
+import { huaweiIAP, IAP_PRODUCT_MAP } from '@/lib/huawei-iap';
 import { useWalletStore, CurrencyType } from '@/lib/wallet-store';
 import { categoryInfo, QuestionCategory, questions as defaultQuestions } from '@/lib/questions';
 import { Progress } from '@/components/ui/progress';
@@ -958,6 +959,13 @@ function PackagesScreen() {
   const { setScreen, packages, updateUserCoins, updateUserGems } = useGameStore();
   const [selectedPkg, setSelectedPkg] = useState<PackageData | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [purchasing, setPurchasing] = useState(false);
+  const [iapAvailable, setIapAvailable] = useState(false);
+  const [purchaseStatus, setPurchaseStatus] = useState<{show: boolean; success: boolean; message: string}>({show: false, success: false, message: ''});
+
+  useEffect(() => {
+    huaweiIAP.init().then(available => setIapAvailable(available));
+  }, []);
 
   const defaultPackages: PackageData[] = packages.length > 0 ? packages : [
     { id: '1', name: 'باقة المبتدئ', description: 'بداية رائعة لمغامرتك!', icon: '🎒', coins: 500, gems: 0, price: 4.99, color: 'from-emerald-500 to-teal-600', isActive: true },
@@ -967,17 +975,51 @@ function PackagesScreen() {
   ];
 
   const handleBuy = (pkg: PackageData) => { setSelectedPkg(pkg); setShowConfirm(true); };
-  const confirmBuy = () => {
-    if (selectedPkg) { updateUserCoins(selectedPkg.coins); updateUserGems(selectedPkg.gems); }
-    setShowConfirm(false); setSelectedPkg(null);
+  
+  const confirmBuy = async () => {
+    if (!selectedPkg) return;
+    setPurchasing(true);
+
+    try {
+      if (iapAvailable) {
+        const result = await huaweiIAP.purchase(selectedPkg.id);
+        if (result.success) {
+          updateUserCoins(selectedPkg.coins);
+          updateUserGems(selectedPkg.gems);
+          if (result.purchaseToken) {
+            await huaweiIAP.consumePurchase(result.purchaseToken);
+          }
+          setPurchaseStatus({show: true, success: true, message: `تم شحن ${selectedPkg.coins} عملة و ${selectedPkg.gems} جوهرة بنجاح!`});
+          const wallet = useWalletStore.getState();
+          wallet.addTransaction({ type: 'purchase', amount: selectedPkg.coins, currency: 'coins', description: `شراء ${selectedPkg.name} - متجر هواوي` });
+        } else {
+          setPurchaseStatus({show: true, success: false, message: 'فشل عملية الشراء. يرجى المحاولة مرة أخرى.'});
+        }
+      } else {
+        updateUserCoins(selectedPkg.coins);
+        updateUserGems(selectedPkg.gems);
+        setPurchaseStatus({show: true, success: true, message: `تم شحن ${selectedPkg.coins} عملة و ${selectedPkg.gems} جوهرة!`});
+      }
+    } catch (error) {
+      setPurchaseStatus({show: true, success: false, message: 'حدث خطأ أثناء الشراء'});
+    }
+
+    setPurchasing(false);
+    setShowConfirm(false);
+    setSelectedPkg(null);
   };
 
   return (
     <motion.div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 p-4" variants={pageVariants} initial="initial" animate="animate" exit="exit">
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-3 mb-4">
         <motion.button whileTap={{ scale: 0.9 }} onClick={() => setScreen('menu')} className="text-white/60 hover:text-white text-2xl">→</motion.button>
         <h2 className="text-xl font-bold text-white">📦 باقات الشحن</h2>
       </div>
+      {iapAvailable && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-2 mb-4 text-center">
+          <span className="text-xs text-red-400">الشراء عبر متجر هواوي AppGallery متاح</span>
+        </div>
+      )}
       <div className="space-y-4">
         {defaultPackages.filter(p => p.isActive).map((pkg, i) => (
           <motion.div key={pkg.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}
@@ -988,8 +1030,8 @@ function PackagesScreen() {
                 <div className="text-white font-bold text-lg">{pkg.name}</div>
                 <div className="text-white/70 text-sm">{pkg.description}</div>
                 <div className="flex gap-3 mt-2">
-                  {pkg.coins > 0 && <span className="bg-black/20 rounded-full px-2 py-0.5 text-xs text-white">🪙 {pkg.coins.toLocaleString()}</span>}
-                  {pkg.gems > 0 && <span className="bg-black/20 rounded-full px-2 py-0.5 text-xs text-white">💎 {pkg.gems}</span>}
+                  {pkg.coins > 0 && <span className="bg-black/20 rounded-full px-2 py-0.5 text-xs text-white">{'\u{1FA99}'} {pkg.coins.toLocaleString()}</span>}
+                  {pkg.gems > 0 && <span className="bg-black/20 rounded-full px-2 py-0.5 text-xs text-white">{'\u{1F48E}'} {pkg.gems}</span>}
                 </div>
               </div>
               <GlowButton onClick={() => handleBuy(pkg)} className="text-sm px-4 py-2">{pkg.price} ر.س</GlowButton>
@@ -1003,13 +1045,38 @@ function PackagesScreen() {
             <span className="text-5xl">{selectedPkg.icon}</span>
             <h3 className="text-white font-bold text-lg mt-3">{selectedPkg.name}</h3>
             <p className="text-white/50 text-sm mt-1">سيتم شحن {selectedPkg.coins} عملة و {selectedPkg.gems} جوهرة</p>
+            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-2 mt-3">
+              <span className="text-yellow-400 text-xs">{iapAvailable ? 'سيتم الدفع عبر متجر هواوي' : 'شحن مباشر'}</span>
+            </div>
             <div className="flex gap-3 mt-4">
-              <GlowButton onClick={confirmBuy} className="flex-1">تأكيد الشراء</GlowButton>
+              <GlowButton onClick={confirmBuy} disabled={purchasing} className="flex-1">
+                {purchasing ? 'جارٍ الشراء...' : 'تأكيد الشراء'}
+              </GlowButton>
               <GlowButton onClick={() => setShowConfirm(false)} variant="outline" className="flex-1">إلغاء</GlowButton>
             </div>
           </motion.div>
         </motion.div>
       )}
+      <AnimatePresence>
+        {purchaseStatus.show && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+            onClick={() => setPurchaseStatus({show: false, success: false, message: ''})}>
+            <motion.div initial={{ scale: 0.5 }} animate={{ scale: 1 }} exit={{ scale: 0.5 }}
+              onClick={e => e.stopPropagation()}
+              className={`rounded-2xl p-6 max-w-sm w-full text-center border ${
+                purchaseStatus.success ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'
+              }`}>
+              <span className="text-5xl block mb-3">{purchaseStatus.success ? '🎉' : '😔'}</span>
+              <h3 className={`font-bold text-lg ${purchaseStatus.success ? 'text-emerald-400' : 'text-red-400'}`}>
+                {purchaseStatus.success ? 'تم الشراء بنجاح!' : 'فشل الشراء'}
+              </h3>
+              <p className="text-white/50 text-sm mt-2">{purchaseStatus.message}</p>
+              <GlowButton onClick={() => setPurchaseStatus({show: false, success: false, message: ''})} className="mt-4">حسناً</GlowButton>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

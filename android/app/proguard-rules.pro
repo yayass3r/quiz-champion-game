@@ -31,3 +31,15 @@
 # Suppress warnings for WebView
 -dontwarn android.webkit.WebView
 -dontwarn android.webkit.WebViewClient
+
+# Huawei HMS IAP
+-keep class com.huawei.hms.** { *; }
+-keep class com.huawei.hianalytics.** { *; }
+-dontwarn com.huawei.hms.**
+-dontwarn com.huawei.hianalytics.**
+-dontwarn com.huawei.android.os.**
+-dontwarn android.telephony.HwTelephonyManager
+-dontwarn org.bouncycastle.**
+
+# Keep plugin class
+-keep class com.quizchampion.game.plugins.** { *; }

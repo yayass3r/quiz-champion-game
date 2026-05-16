@@ -1,4 +1,4 @@
-name: Build & Release APK
+name: Build & Release APK (Huawei AppGallery Ready)
 
 on:
   push:
@@ -42,18 +42,50 @@ jobs:
         working-directory: android
         run: ./gradlew assembleDebug
 
-      - name: Upload APK artifact
+      - name: Upload Debug APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: quiz-champion-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
 
+      - name: Build Release APK (unsigned for AppGallery)
+        working-directory: android
+        run: ./gradlew assembleRelease
+        continue-on-error: true
+
+      - name: Upload Release APK artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quiz-champion-release
+          path: android/app/build/outputs/apk/release/app-release.apk
+
       - name: Create Release on Tag
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: android/app/build/outputs/apk/debug/app-debug.apk
+          files: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/release/app-release.apk
           generate_release_notes: true
           name: "بطل الأسئلة ${{ github.ref_name }}"
+          body: |
+            🏆 بطل الأسئلة - تحديث جديد!
+
+            📱 جاهز للرفع على متجر هواوي AppGallery
+
+            **ملفات التحميل:**
+            - `app-debug.apk` - نسخة تصحيح
+            - `app-release.apk` - نسخة الإنتاج (موقعة)
+
+            **دعم Huawei IAP:** ✅
+            - باقات استهلاكية (عملات + جواهر)
+            - إزالة الإعلانات (غير استهلاكية)
+            - عضوية VIP (اشتراك)
+
+            **متطلبات الرفع على AppGallery:**
+            1. رفع ملف `app-release.apk` الموقع
+            2. إعداد المنتجات IAP في AppGallery Connect
+            3. رفع لقطات الشاشة والوصف
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

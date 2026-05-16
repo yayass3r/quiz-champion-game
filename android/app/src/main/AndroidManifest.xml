@@ -14,6 +14,16 @@
         android:networkSecurityConfig="@xml/network_security_config"
         android:usesCleartextTraffic="false">
 
+        <!-- Huawei HMS Core App ID -->
+        <meta-data
+            android:name="com.huawei.hms.client.appid"
+            android:value="appid=YOUR_HUAWEI_APP_ID" />
+
+        <!-- Huawei Analytics -->
+        <meta-data
+            android:name="com.huawei.hms.client.analytics.enabled"
+            android:value="true" />
+
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
             android:name=".MainActivity"
@@ -43,4 +53,9 @@
     <!-- Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Required for Huawei HMS IAP -->
+    <uses-permission android:name="com.huawei.app.market.service.commondata.permission.GET_COMMON_DATA" />
+    <!-- Required for Huawei Push -->
+    <uses-permission android:name="android.permission.RECEIVE_PUSH_MESSAGES" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 </manifest>

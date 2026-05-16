@@ -1,0 +1,41 @@
+{
+  "config_info": {
+    "config_version": "3"
+  },
+  "app_info": {
+    "app_id": "YOUR_HUAWEI_APP_ID",
+    "package_name": "com.quizchampion.game",
+    "app_name": "بطل الأسئلة",
+    "version": {
+      "name": "3.2.0",
+      "code": "7"
+    },
+    "agconnect": {
+      "apigw": {
+        "backurl": ""
+      }
+    }
+  },
+  "service": {
+    "iap": {
+      "available": true
+    },
+    "analytics": {
+      "available": true,
+      "channel": "AppGallery"
+    },
+    "push": {
+      "available": true
+    }
+  },
+  "client": {
+    "cp_id": "YOUR_CP_ID",
+    "product_id": "YOUR_PRODUCT_ID",
+    "client_id": "YOUR_CLIENT_ID",
+    "client_secret": "YOUR_CLIENT_SECRET",
+    "app_id": "YOUR_HUAWEI_APP_ID",
+    "package_name": "com.quizchampion.game",
+    "sha256_cert_fingerprints": ["YOUR_SHA256_FINGERPRINT"]
+  },
+  "configuration_version": "1.0"
+}

@@ -1015,10 +1015,37 @@ function PackagesScreen() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
   const [iapAvailable, setIapAvailable] = useState(false);
+  const [iapLoading, setIapLoading] = useState(true);
+  const [localizedPrices, setLocalizedPrices] = useState<Record<string, string>>({});
   const [purchaseStatus, setPurchaseStatus] = useState<{show: boolean; success: boolean; message: string}>({show: false, success: false, message: ''});
 
   useEffect(() => {
-    huaweiIAP.init().then(available => setIapAvailable(available));
+    const initIAP = async () => {
+      setIapLoading(true);
+      const available = await huaweiIAP.init();
+      setIapAvailable(available);
+
+      if (available) {
+        // Load localized prices from Huawei IAP
+        const prices: Record<string, string> = {};
+        Object.keys(IAP_PRODUCT_MAP).forEach(pkgId => {
+          prices[pkgId] = huaweiIAP.getLocalizedPrice(pkgId);
+        });
+        setLocalizedPrices(prices);
+
+        // Handle any pending purchases from previous sessions
+        const pending = await huaweiIAP.handlePendingPurchases();
+        if (pending.coins > 0 || pending.gems > 0) {
+          updateUserCoins(pending.coins);
+          updateUserGems(pending.gems);
+          const wallet = useWalletStore.getState();
+          if (pending.coins > 0) wallet.addTransaction({ type: 'purchase', amount: pending.coins, currency: 'coins', description: 'استرداد مشتريات معلقة - متجر هواوي' });
+          if (pending.gems > 0) wallet.addTransaction({ type: 'reward', amount: pending.gems, currency: 'gems', description: 'استرداد مشتريات معلقة - متجر هواوي' });
+        }
+      }
+      setIapLoading(false);
+    };
+    initIAP();
   }, []);
 
   const defaultPackages: PackageData[] = packages.length > 0 ? packages : [
@@ -1027,6 +1054,13 @@ function PackagesScreen() {
     { id: '3', name: 'باقة البطل', description: 'أسلحة قوية للبطل!', icon: '🛡️', coins: 3500, gems: 15, price: 19.99, color: 'from-purple-500 to-violet-600', isActive: true },
     { id: '4', name: 'باقة الأسطورة', description: 'أقوى باقة للمحترفين!', icon: '👑', coins: 8000, gems: 40, price: 39.99, color: 'from-red-500 to-rose-600', isActive: true },
   ];
+
+  const getPriceDisplay = (pkg: PackageData): string => {
+    if (iapAvailable && localizedPrices[pkg.id]) {
+      return localizedPrices[pkg.id];
+    }
+    return `${pkg.price} ر.س`;
+  };
 
   const handleBuy = (pkg: PackageData) => { setSelectedPkg(pkg); setShowConfirm(true); };
   
@@ -1040,27 +1074,67 @@ function PackagesScreen() {
         if (result.success) {
           updateUserCoins(selectedPkg.coins);
           updateUserGems(selectedPkg.gems);
+          // Consume the purchase to allow repurchasing (consumable items)
           if (result.purchaseToken) {
             await huaweiIAP.consumePurchase(result.purchaseToken);
           }
-          setPurchaseStatus({show: true, success: true, message: `تم شحن ${selectedPkg.coins} عملة و ${selectedPkg.gems} جوهرة بنجاح!`});
+          setPurchaseStatus({show: true, success: true, message: `تم شحن ${selectedPkg.coins} عملة${selectedPkg.gems > 0 ? ` و ${selectedPkg.gems} جوهرة` : ''} بنجاح!`});
           const wallet = useWalletStore.getState();
           wallet.addTransaction({ type: 'purchase', amount: selectedPkg.coins, currency: 'coins', description: `شراء ${selectedPkg.name} - متجر هواوي` });
+          if (selectedPkg.gems > 0) {
+            wallet.addTransaction({ type: 'purchase', amount: selectedPkg.gems, currency: 'gems', description: `شراء ${selectedPkg.name} - متجر هواوي` });
+          }
         } else {
           setPurchaseStatus({show: true, success: false, message: 'فشل عملية الشراء. يرجى المحاولة مرة أخرى.'});
         }
       } else {
+        // Demo mode - direct credit without payment
         updateUserCoins(selectedPkg.coins);
         updateUserGems(selectedPkg.gems);
-        setPurchaseStatus({show: true, success: true, message: `تم شحن ${selectedPkg.coins} عملة و ${selectedPkg.gems} جوهرة!`});
+        setPurchaseStatus({show: true, success: true, message: `تم شحن ${selectedPkg.coins} عملة${selectedPkg.gems > 0 ? ` و ${selectedPkg.gems} جوهرة` : ''}! (وضع تجريبي)`});
+        const wallet = useWalletStore.getState();
+        wallet.addTransaction({ type: 'earn', amount: selectedPkg.coins, currency: 'coins', description: `شحن تجريبي - ${selectedPkg.name}` });
       }
-    } catch (error) {
-      setPurchaseStatus({show: true, success: false, message: 'حدث خطأ أثناء الشراء'});
+    } catch (error: any) {
+      const errorMsg = error?.message || 'حدث خطأ أثناء الشراء';
+      setPurchaseStatus({show: true, success: false, message: errorMsg});
     }
 
     setPurchasing(false);
     setShowConfirm(false);
     setSelectedPkg(null);
+  };
+
+  const handleRestorePurchases = async () => {
+    if (!iapAvailable) return;
+    try {
+      const purchases = await huaweiIAP.restorePurchases();
+      if (purchases.length > 0) {
+        let totalCoins = 0;
+        let totalGems = 0;
+        for (const purchase of purchases) {
+          const pkgEntry = Object.entries(IAP_PRODUCT_MAP).find(([_, info]) => info.productId === purchase.productId);
+          if (pkgEntry) {
+            totalCoins += pkgEntry[1].coins;
+            totalGems += pkgEntry[1].gems;
+            if (purchase.purchaseToken) {
+              await huaweiIAP.consumePurchase(purchase.purchaseToken);
+            }
+          }
+        }
+        if (totalCoins > 0 || totalGems > 0) {
+          updateUserCoins(totalCoins);
+          updateUserGems(totalGems);
+          setPurchaseStatus({show: true, success: true, message: `تم استرداد ${totalCoins} عملة${totalGems > 0 ? ` و ${totalGems} جوهرة` : ''}!`});
+        } else {
+          setPurchaseStatus({show: true, success: true, message: 'لا توجد مشتريات لاستردادها'});
+        }
+      } else {
+        setPurchaseStatus({show: true, success: true, message: 'لا توجد مشتريات سابقة'});
+      }
+    } catch {
+      setPurchaseStatus({show: true, success: false, message: 'فشل استرداد المشتريات'});
+    }
   };
 
   return (
@@ -1069,38 +1143,62 @@ function PackagesScreen() {
         <motion.button whileTap={{ scale: 0.9 }} onClick={() => setScreen('menu')} className="text-white/60 hover:text-white text-2xl">→</motion.button>
         <h2 className="text-xl font-bold text-white">📦 باقات الشحن</h2>
       </div>
-      {iapAvailable && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-2 mb-4 text-center">
-          <span className="text-xs text-red-400">الشراء عبر متجر هواوي AppGallery متاح</span>
+
+      {/* IAP Status Banner */}
+      {iapLoading ? (
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-2 mb-4 text-center">
+          <span className="text-xs text-blue-400">⏳ جارٍ الاتصال بمتجر هواوي...</span>
+        </div>
+      ) : iapAvailable ? (
+        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-2 mb-4 text-center">
+          <span className="text-xs text-emerald-400">Huawei AppGallery ✅ الشراء الآمن متاح</span>
+        </div>
+      ) : (
+        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-2 mb-4 text-center">
+          <span className="text-xs text-yellow-400">⚠️ وضع تجريبي - المتجر غير متاح على هذا الجهاز</span>
         </div>
       )}
+
       <div className="space-y-4">
         {defaultPackages.filter(p => p.isActive).map((pkg, i) => (
           <motion.div key={pkg.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}
             className={`bg-gradient-to-r ${pkg.color} rounded-2xl p-5 relative overflow-hidden`}>
+            {i === 0 && <div className="absolute top-2 right-2 bg-white/20 rounded-full px-2 py-0.5 text-[10px] text-white font-bold">الأكثر طلباً</div>}
+            {i === 3 && <div className="absolute top-2 right-2 bg-yellow-400 rounded-full px-2 py-0.5 text-[10px] text-black font-bold">أفضل قيمة</div>}
             <div className="flex items-center gap-4">
               <span className="text-5xl">{pkg.icon}</span>
               <div className="flex-1">
                 <div className="text-white font-bold text-lg">{pkg.name}</div>
                 <div className="text-white/70 text-sm">{pkg.description}</div>
                 <div className="flex gap-3 mt-2">
-                  {pkg.coins > 0 && <span className="bg-black/20 rounded-full px-2 py-0.5 text-xs text-white">{'\u{1FA99}'} {pkg.coins.toLocaleString()}</span>}
-                  {pkg.gems > 0 && <span className="bg-black/20 rounded-full px-2 py-0.5 text-xs text-white">{'\u{1F48E}'} {pkg.gems}</span>}
+                  {pkg.coins > 0 && <span className="bg-black/20 rounded-full px-2 py-0.5 text-xs text-white">🪙 {pkg.coins.toLocaleString()}</span>}
+                  {pkg.gems > 0 && <span className="bg-black/20 rounded-full px-2 py-0.5 text-xs text-white">💎 {pkg.gems}</span>}
                 </div>
               </div>
-              <GlowButton onClick={() => handleBuy(pkg)} className="text-sm px-4 py-2">{pkg.price} ر.س</GlowButton>
+              <GlowButton onClick={() => handleBuy(pkg)} className="text-sm px-4 py-2">{getPriceDisplay(pkg)}</GlowButton>
             </div>
           </motion.div>
         ))}
       </div>
+
+      {/* Restore Purchases Button */}
+      {iapAvailable && (
+        <div className="mt-4">
+          <button onClick={handleRestorePurchases}
+            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white/60 hover:bg-white/10 transition-all flex items-center justify-center gap-2">
+            <span className="text-sm">🔄</span><span className="text-sm">استرداد المشتريات السابقة</span>
+          </button>
+        </div>
+      )}
+
       {showConfirm && selectedPkg && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
           <motion.div initial={{ scale: 0.8 }} animate={{ scale: 1 }} className="bg-gray-900 rounded-2xl p-6 max-w-sm w-full text-center border border-white/10">
             <span className="text-5xl">{selectedPkg.icon}</span>
             <h3 className="text-white font-bold text-lg mt-3">{selectedPkg.name}</h3>
-            <p className="text-white/50 text-sm mt-1">سيتم شحن {selectedPkg.coins} عملة و {selectedPkg.gems} جوهرة</p>
+            <p className="text-white/50 text-sm mt-1">سيتم شحن {selectedPkg.coins} عملة{selectedPkg.gems > 0 ? ` و ${selectedPkg.gems} جوهرة` : ''}</p>
             <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-2 mt-3">
-              <span className="text-yellow-400 text-xs">{iapAvailable ? 'سيتم الدفع عبر متجر هواوي' : 'شحن مباشر'}</span>
+              <span className="text-yellow-400 text-xs">{iapAvailable ? '💳 الدفع الآمن عبر متجر هواوي AppGallery' : '🎮 شحن تجريبي مباشر'}</span>
             </div>
             <div className="flex gap-3 mt-4">
               <GlowButton onClick={confirmBuy} disabled={purchasing} className="flex-1">

@@ -103,7 +103,7 @@ function SplashScreen() {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}>
         <GlowButton onClick={() => setScreen('login')} className="text-lg px-12 py-4">🚀 ابدأ المغامرة</GlowButton>
       </motion.div>
-      <motion.p className="text-xs text-white/20 mt-8" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}>الإصدار 3.1 — إطلاق رسمي على Google Play</motion.p>
+      <motion.p className="text-xs text-white/20 mt-8" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}>الإصدار 3.2 — دعم Huawei IAP + تحميل APK</motion.p>
     </motion.div>
   );
 }
@@ -919,6 +919,35 @@ function SpinWheelScreen() {
 // ===== Settings =====
 function SettingsScreen() {
   const { setScreen, soundEnabled, vibrationEnabled, darkMode, toggleSound, toggleVibration, toggleDarkMode, logout, isLoggedIn } = useGameStore();
+  const APK_DOWNLOAD_URL = 'https://github.com/yayass3r/quiz-champion-game/releases/latest/download/app-debug.apk';
+  const REPO_URL = 'https://github.com/yayass3r/quiz-champion-game';
+
+  const handleDownloadAPK = async () => {
+    try {
+      const response = await fetch(APK_DOWNLOAD_URL, { method: 'HEAD' });
+      if (response.ok) {
+        window.open(APK_DOWNLOAD_URL, '_blank');
+      } else {
+        window.open(`${REPO_URL}/releases`, '_blank');
+      }
+    } catch {
+      window.open(`${REPO_URL}/releases`, '_blank');
+    }
+  };
+
+  const handleShareApp = async () => {
+    const shareData = {
+      title: 'بطل الأسئلة',
+      text: 'جرب لعبة بطل الأسئلة! تتحدى عقلك وتتنافس مع الآخرين 🏆',
+      url: REPO_URL,
+    };
+    if (navigator.share) {
+      try { await navigator.share(shareData); } catch { /* user cancelled */ }
+    } else {
+      try { await navigator.clipboard.writeText(REPO_URL); alert('تم نسخ الرابط!'); } catch { /* fallback */ }
+    }
+  };
+
   return (
     <motion.div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 p-4" variants={pageVariants} initial="initial" animate="animate" exit="exit">
       <div className="flex items-center gap-3 mb-6">
@@ -939,14 +968,39 @@ function SettingsScreen() {
           </div>
         ))}
       </div>
-      <div className="mt-6 space-y-3">
-        <button className="w-full flex items-center gap-3 p-4 bg-white/5 rounded-xl text-white/60 hover:text-white transition-all"><span>⭐</span><span className="text-sm">قيّم التطبيق</span></button>
-        <button className="w-full flex items-center gap-3 p-4 bg-white/5 rounded-xl text-white/60 hover:text-white transition-all"><span>📤</span><span className="text-sm">شارك التطبيق</span></button>
+
+      {/* Download APK Section */}
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+        className="mt-6 bg-gradient-to-r from-emerald-500/10 to-teal-600/10 border border-emerald-500/20 rounded-2xl p-4">
+        <div className="flex items-center gap-3 mb-3">
+          <span className="text-2xl">📱</span>
+          <div>
+            <div className="text-white font-bold text-sm">تحميل التطبيق (APK)</div>
+            <div className="text-white/40 text-xs">آخر إصدار من GitHub</div>
+          </div>
+        </div>
+        <GlowButton onClick={handleDownloadAPK} className="w-full text-sm py-2">
+          ⬇️ تحميل APK الآن
+        </GlowButton>
+        <p className="text-white/20 text-[10px] text-center mt-2">
+          يتطلب تفعيل التثبيت من مصادر خارجية
+        </p>
+      </motion.div>
+
+      <div className="mt-4 space-y-3">
+        <a href="https://play.google.com/store/apps/details?id=com.quizchampion.game" target="_blank" rel="noopener noreferrer"
+          className="w-full flex items-center gap-3 p-4 bg-white/5 rounded-xl text-white/60 hover:text-white transition-all">
+          <span>⭐</span><span className="text-sm">قيّم التطبيق</span>
+        </a>
+        <button onClick={handleShareApp} className="w-full flex items-center gap-3 p-4 bg-white/5 rounded-xl text-white/60 hover:text-white transition-all"><span>📤</span><span className="text-sm">شارك التطبيق</span></button>
         <button onClick={() => setScreen('privacy')} className="w-full flex items-center gap-3 p-4 bg-white/5 rounded-xl text-white/60 hover:text-white transition-all"><span>📜</span><span className="text-sm">سياسة الخصوصية</span></button>
-        <button className="w-full flex items-center gap-3 p-4 bg-white/5 rounded-xl text-white/60 hover:text-white transition-all"><span>ℹ️</span><span className="text-sm">حول التطبيق</span></button>
+        <a href={REPO_URL} target="_blank" rel="noopener noreferrer"
+          className="w-full flex items-center gap-3 p-4 bg-white/5 rounded-xl text-white/60 hover:text-white transition-all">
+          <span>ℹ️</span><span className="text-sm">حول التطبيق</span>
+        </a>
       </div>
       <div className="mt-4 text-center">
-        <p className="text-white/20 text-[10px]">بطل الأسئلة - الإصدار 3.1.0</p>
+        <p className="text-white/20 text-[10px]">بطل الأسئلة - الإصدار 3.2.0</p>
         <p className="text-white/15 text-[10px]">com.quizchampion.game</p>
       </div>
       {isLoggedIn && <GlowButton onClick={() => { useAuthStore.getState().logout(); logout(); }} variant="danger" className="w-full mt-6">🚪 تسجيل الخروج</GlowButton>}

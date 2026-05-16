@@ -1,12 +1,94 @@
 # Huawei AppGallery Deployment Guide
 # دليل رفع التطبيق على متجر هواوي
 
+## روابط التحميل المباشر
+
+| النوع | الرابط |
+|-------|--------|
+| **نسخة الإنتاج (Release APK)** | https://github.com/yayass3r/quiz-champion-game/releases/latest/download/app-release.apk |
+| **نسخة الاختبار (Debug APK)** | https://github.com/yayass3r/quiz-champion-game/releases/latest/download/app-debug.apk |
+| **صفحة جميع الإصدارات** | https://github.com/yayass3r/quiz-champion-game/releases/latest |
+
+---
+
+## معلومات التطبيق
+
+- **اسم التطبيق:** بطل الأسئلة / Quiz Champion
+- **اسم الحزمة:** com.quizchampion.game
+- **الإصدار:** 3.2.0
+- **الفئة:** ألعاب / أسئلة وترفيه (Trivia / Educational)
+- **التقييم العمري:** 3+ (مناسب لجميع الأعمار)
+
+### وصف قصير (عربي):
+تحدَّ نفسك في ألغاز متنوعة وأسئلة ثقافية مشوقة! لعبة بطل الأسئلة
+
+### وصف قصير (إنجليزي):
+Challenge yourself with diverse puzzles and trivia! Quiz Champion Game
+
+### وصف كامل (عربي):
+بطل الأسئلة هي لعبة ألزان وأسئلة ثقافية ممتعة تجمع بين الترفيه والتعلم. اختر من بين 6 أنماط لعب مختلفة: الكلاسيكي، السريع، البقاء، الماراثون، التحدي اليومي، ومعارك الفرق. تنافس مع أصدقائك وتسلق قائمة المتصدرين!
+
+اكتشف أكثر من 17 تصنيفاً للأسئلة شاملة: العلوم، التاريخ، الجغرافيا، الرياضة، الفنون، الثقافة الإسلامية، التقنية، الطب، الأدب، السينما، الموسيقى، الطبيعة، الفلسفة، الاقتصاد، القانون، الفضاء، واللغات. حقق الإنجازات واحصل على المكافآت اليومية واشترِ من المتجر أدوات مساعدة قوية.
+
+مميزات اللعبة:
+• 6 أنماط لعب فريدة لتناسب جميع المستويات
+• أكثر من 17 تصنيف للأسئلة الثقافية
+• نظام إنجازات ومكافآت يومية
+• متجر أدوات مساعدة: حذف نصف الإجابات، تجميد الوقت، تلميحات
+• عجلة حظ يومية لربح جوائز مجانية
+• نظام محفظة وتحويل عملات بين اللاعبين
+• لوحة متصدرين عالمية
+• معارك فرق جماعية
+• باقات شراء عملات وجواهر عبر متجر هواوي
+• إمكانية إضافة أسئلة مخصصة
+
+حمّل الآن واصبح بطل الأسئلة!
+
+### وصف كامل (إنجليزي):
+Quiz Champion is an exciting trivia and puzzle game that combines entertainment with learning. Choose from 6 different game modes: Classic, Speed, Survival, Marathon, Daily Challenge, and Team Battles. Compete with friends and climb the leaderboard!
+
+Discover over 17 question categories including: Science, History, Geography, Sports, Arts, Islamic Culture, Technology, Medicine, Literature, Cinema, Music, Nature, Philosophy, Economics, Law, Space, and Languages. Earn achievements, collect daily rewards, and purchase powerful power-ups from the shop.
+
+Game Features:
+• 6 unique game modes for all skill levels
+• Over 17 trivia question categories
+• Achievement system and daily rewards
+• Power-up shop: 50/50, freeze time, hints, and more
+• Daily lucky wheel for free prizes
+• Wallet system with player-to-player transfers
+• Global leaderboard
+• Team battles
+• Coin and gem purchase packs via Huawei AppGallery
+• Custom question submission
+
+Download now and become the Quiz Champion!
+
+---
+
+## الملفات المطلوبة للمتجر
+
+### أيقونة التطبيق:
+- **الملف:** `public/icon-512.png` (512×512 PNG)
+- **ملف إضافي:** `public/icon-1024.png` (1024×1024 PNG)
+
+### صورة العرض (Feature Graphic):
+- **الملف:** `public/feature-graphic.png` (1024×500 PNG)
+
+### سياسة الخصوصية:
+- **الملف:** `PRIVACY_POLICY.md`
+- **الرابط:** https://github.com/yayass3r/quiz-champion-game/blob/main/PRIVACY_POLICY.md
+
+### وصف التطبيق الكامل:
+- **الملف:** `app-store-listing.json` (يحتوي على كل الأوصاف والمنتجات)
+
+---
+
 ## المتطلبات الأساسية
 
 ### 1. حساب المطور في هواوي
 - سجّل في [Huawei Developer](https://developer.huawei.com/)
 - أكمل التحقق من الهوية
-- ادفع رسوم التسجيل (مجاني للأفراد)
+- التسجيل مجاني للأفراد
 
 ### 2. إنشاء التطبيق في AppGallery Connect
 1. اذهب إلى [AppGallery Connect](https://developer.huawei.com/consumer/cn/service/josp/agc/index.html)
@@ -38,15 +120,9 @@
 ## إعداد ملف agconnect-services.json
 
 1. من AppGallery Connect → **Project Settings**
-2. انسخ قيم التالي:
-   - App ID
-   - CP ID
-   - Product ID
-   - Client ID
-   - Client Secret
-3. حمّل ملف `agconnect-services.json`
-4. ضعه في: `android/app/agconnect-services.json`
-5. حدث `YOUR_HUAWEI_APP_ID` في `AndroidManifest.xml`
+2. حمّل ملف `agconnect-services.json`
+3. ضعه في: `android/app/agconnect-services.json`
+4. حدث `YOUR_HUAWEI_APP_ID` في `AndroidManifest.xml`
 
 ## إعداد توقيع التطبيق
 
@@ -79,20 +155,29 @@ npx cap sync android
 cd android && ./gradlew assembleRelease
 ```
 
+### بناء تلقائي عبر GitHub Actions:
+```bash
+git tag v3.3.0
+git push origin v3.3.0
+```
+سيتم بناء APK تلقائياً ورفعه كـ Release على GitHub.
+
 ### ملف APK الناتج:
 `android/app/build/outputs/apk/release/app-release.apk`
 
 ### رفع على AppGallery:
 1. اذهب إلى **AppGallery Connect** → تطبيقك
 2. انقر على **Version Information** → **New Version**
-3. رفع ملف APK
+3. رفع ملف APK الموقع
 4. املأ معلومات الإصدار:
    - الإصدار: 3.2.0
-   - ملاحظات التحديث: دعم المشتريات من متجر هواوي + تحسينات
-5. أضف لقطات الشاشة (مطلوب 3-8 لقطات)
-6. أضف أيقونة التطبيق (512×512)
-7. أضف صورة العرض (1024×500)
-8. قدّم للمراجعة
+   - ملاحظات التحديث: دعم المشتريات من متجر هواوي + أيقونة جديدة + تحسينات
+5. أضف أيقونة التطبيق: `public/icon-512.png` (512×512)
+6. أضف صورة العرض: `public/feature-graphic.png` (1024×500)
+7. أضف لقطات الشاشة (مطلوب 3-8 لقطات)
+8. أضف الوصف بالعربية والإنجليزية (من ملف `app-store-listing.json`)
+9. أضف رابط سياسة الخصوصية
+10. قدّم للمراجعة
 
 ## متطلبات المحتوى
 
@@ -109,7 +194,7 @@ cd android && ./gradlew assembleRelease
 
 ### معلومات الخصوصية:
 - نوع البيانات المجمعة: لا شيء
-- رابط سياسة الخصوصية: مطلوب
+- رابط سياسة الخصوصية: مطلوب (PRIVACY_POLICY.md)
 
 ## اختبار IAP
 
@@ -139,3 +224,4 @@ adb shell pm clear com.quizchampion.game
 3. **الاشتراكات**: تتطلب موافقة إضافية من هواوي
 4. **تحديثات**: نفس عملية رفع الإصدار الأول مع زيادة versionCode
 5. **التوقيع**: يجب استخدام نفس الـ keystore لكل تحديث
+6. **الأيقونة**: تم تحديث أيقونة التطبيق في جميع الأحجام (mipmap)

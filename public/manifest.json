@@ -1,0 +1,27 @@
+{
+  "name": "بطل الأسئلة - Quiz Champion",
+  "short_name": "بطل الأسئلة",
+  "description": "أقوى لعبة أسئلة وتحديات عربية! تنافس مع أصدقائك، اكشف مستوى ذكاءك، واحصل على المركز الأول في المتصدرين!",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a1a",
+  "theme_color": "#f59e0b",
+  "dir": "rtl",
+  "lang": "ar",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["games", "education", "entertainment"]
+}

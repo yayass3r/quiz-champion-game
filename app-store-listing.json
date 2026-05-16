@@ -1,0 +1,121 @@
+{
+  "app_info": {
+    "app_name_ar": "بطل الأسئلة",
+    "app_name_en": "Quiz Champion",
+    "package_name": "com.quizchampion.game",
+    "version": "3.2.0",
+    "version_code": 7
+  },
+  "descriptions": {
+    "short_ar": "تحدَّ نفسك في ألغاز متنوعة وأسئلة ثقافية مشوقة! لعبة بطل الأسئلة",
+    "short_en": "Challenge yourself with diverse puzzles and trivia! Quiz Champion Game",
+    "full_ar": "بطل الأسئلة هي لعبة ألغاز وأسئلة ثقافية ممتعة تجمع بين الترفيه والتعلم. اختر من بين 6 أنماط لعب مختلفة: الكلاسيكي، السريع، البقاء، الماراثون، التحدي اليومي، ومعارك الفرق. تنافس مع أصدقائك وتسلق قائمة المتصدرين!\n\nاكتشف أكثر من 17 تصنيفاً للأسئلة شاملة: العلوم، التاريخ، الجغرافيا، الرياضة، الفنون، الثقافة الإسلامية، التقنية، الطب، الأدب، السينما، الموسيقى، الطبيعة، الفلسفة، الاقتصاد، القانون، الفضاء، واللغات. حقق الإنجازات واحصل على المكافآت اليومية واشترِ من المتجر أدوات مساعدة قوية.\n\nمميزات اللعبة:\n• 6 أنماط لعب فريدة لتناسب جميع المستويات\n• أكثر من 17 تصنيف للأسئلة الثقافية\n• نظام إنجازات ومكافآت يومية\n• متجر أدوات مساعدة: حذف نصف الإجابات، تجميد الوقت، تلميحات\n• عجلة حظ يومية لربح جوائز مجانية\n• نظام محفظة وتحويل عملات بين اللاعبين\n• لوحة متصدرين عالمية\n• معارك فرق جماعية\n• باقات شراء عملات وجواهر عبر متجر هواوي\n• إمكانية إضافة أسئلة مخصصة\n\nحمّل الآن واصبح بطل الأسئلة!",
+    "full_en": "Quiz Champion is an exciting trivia and puzzle game that combines entertainment with learning. Choose from 6 different game modes: Classic, Speed, Survival, Marathon, Daily Challenge, and Team Battles. Compete with friends and climb the leaderboard!\n\nDiscover over 17 question categories including: Science, History, Geography, Sports, Arts, Islamic Culture, Technology, Medicine, Literature, Cinema, Music, Nature, Philosophy, Economics, Law, Space, and Languages. Earn achievements, collect daily rewards, and purchase powerful power-ups from the shop.\n\nGame Features:\n• 6 unique game modes for all skill levels\n• Over 17 trivia question categories\n• Achievement system and daily rewards\n• Power-up shop: 50/50, freeze time, hints, and more\n• Daily lucky wheel for free prizes\n• Wallet system with player-to-player transfers\n• Global leaderboard\n• Team battles\n• Coin and gem purchase packs via Huawei AppGallery\n• Custom question submission\n\nDownload now and become the Quiz Champion!"
+  },
+  "category": {
+    "primary": "Games",
+    "secondary": "Trivia / Educational"
+  },
+  "content_rating": {
+    "age_rating": "3+",
+    "content_flags": {
+      "violence": false,
+      "sexual_content": false,
+      "profanity": false,
+      "drugs": false,
+      "gambling": false,
+      "user_interaction": true,
+      "in_app_purchases": true
+    }
+  },
+  "privacy_policy": {
+    "url": "https://github.com/yayass3r/quiz-champion-game/blob/main/PRIVACY_POLICY.md",
+    "data_collected": "none",
+    "data_shared": "none"
+  },
+  "iap_products": [
+    {
+      "id": "com.quizchampion.starter_pack",
+      "name_ar": "باقة المبتدئ",
+      "name_en": "Starter Pack",
+      "type": "consumable",
+      "price_sar": 4.99,
+      "description_ar": "500 عملة ذهبية",
+      "description_en": "500 Gold Coins"
+    },
+    {
+      "id": "com.quizchampion.adventurer_pack",
+      "name_ar": "باقة المغامر",
+      "name_en": "Adventurer Pack",
+      "type": "consumable",
+      "price_sar": 9.99,
+      "description_ar": "1500 عملة + 5 جواهر",
+      "description_en": "1500 Coins + 5 Gems"
+    },
+    {
+      "id": "com.quizchampion.hero_pack",
+      "name_ar": "باقة البطل",
+      "name_en": "Hero Pack",
+      "type": "consumable",
+      "price_sar": 19.99,
+      "description_ar": "3500 عملة + 15 جوهرة",
+      "description_en": "3500 Coins + 15 Gems"
+    },
+    {
+      "id": "com.quizchampion.legend_pack",
+      "name_ar": "باقة الأسطورة",
+      "name_en": "Legend Pack",
+      "type": "consumable",
+      "price_sar": 39.99,
+      "description_ar": "8000 عملة + 40 جوهرة",
+      "description_en": "8000 Coins + 40 Gems"
+    },
+    {
+      "id": "com.quizchampion.remove_ads",
+      "name_ar": "إزالة الإعلانات",
+      "name_en": "Remove Ads",
+      "type": "non_consumable",
+      "price_sar": 2.99,
+      "description_ar": "إزالة دائمة لجميع الإعلانات",
+      "description_en": "Permanently remove all ads"
+    },
+    {
+      "id": "com.quizchampion.vip_monthly",
+      "name_ar": "عضوية VIP شهرية",
+      "name_en": "VIP Monthly Membership",
+      "type": "subscription",
+      "price_sar": 4.99,
+      "description_ar": "200 عملة + 5 جواهر شهرياً",
+      "description_en": "200 Coins + 5 Gems monthly"
+    }
+  ],
+  "screenshots_required": {
+    "phone": {
+      "count": "3-8",
+      "resolution": "1080x1920 or higher",
+      "format": "PNG/JPG"
+    },
+    "tablet": {
+      "count": "3-8 (optional)",
+      "resolution": "1200x2000 or higher",
+      "format": "PNG/JPG"
+    }
+  },
+  "graphics_required": {
+    "icon": {
+      "size": "512x512",
+      "format": "PNG",
+      "file": "public/icon-512.png"
+    },
+    "feature_graphic": {
+      "size": "1024x500",
+      "format": "PNG/JPG",
+      "file": "public/feature-graphic.png"
+    },
+    "icon_1024": {
+      "size": "1024x1024",
+      "format": "PNG",
+      "file": "public/icon-1024.png"
+    }
+  }
+}

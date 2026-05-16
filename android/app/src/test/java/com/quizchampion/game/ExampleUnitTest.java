@@ -1,4 +1,4 @@
-package com.getcapacitor.myapp;
+package com.quizchampion.game;
 
 import static org.junit.Assert.*;
 

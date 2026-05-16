@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore, AdConfig } from '@/lib/game-store';
 import { useAuthStore } from '@/lib/auth-local';
 import { huaweiIAP, IAP_PRODUCT_MAP } from '@/lib/huawei-iap';
-import { useWalletStore, CurrencyType } from '@/lib/wallet-store';
+import { useWalletStore } from '@/lib/wallet-store';
 import { categoryInfo, QuestionCategory, questions as defaultQuestions } from '@/lib/questions';
 import { Progress } from '@/components/ui/progress';
 
@@ -103,26 +103,7 @@ function SplashScreen() {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}>
         <GlowButton onClick={() => setScreen('login')} className="text-lg px-12 py-4">🚀 ابدأ المغامرة</GlowButton>
       </motion.div>
-      <motion.p className="text-xs text-white/20 mt-8" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}>الإصدار 3.3 — أيقونة جديدة + دعم Huawei AppGallery</motion.p>
-    </motion.div>
-  );
-}
-
-// ===== Login Screen =====
-// ===== Toast Notification =====
-function ToastNotification({ message, type = 'success', onClose }: { message: string; type?: 'success' | 'error' | 'info'; onClose: () => void }) {
-  useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t); }, [onClose]);
-  const colors = {
-    success: 'bg-emerald-500/90 border-emerald-400/30',
-    error: 'bg-red-500/90 border-red-400/30',
-    info: 'bg-blue-500/90 border-blue-400/30',
-  };
-  const icons = { success: '✅', error: '❌', info: 'ℹ️' };
-  return (
-    <motion.div initial={{ opacity: 0, y: -50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -50 }}
-      className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] ${colors[type]} border backdrop-blur-sm text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-sm font-bold`}>
-      <span>{icons[type]}</span><span>{message}</span>
-      <button onClick={onClose} className="mr-2 text-white/60 hover:text-white">✕</button>
+      <motion.p className="text-xs text-white/20 mt-8" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}>الإصدار 3.4 — إصلاح شامل + تحسينات الأداء</motion.p>
     </motion.div>
   );
 }
@@ -3001,6 +2982,22 @@ function MaintenanceScreen({ message }: { message: string }) {
 
 export default function Home() {
   const { currentScreen, adminSettings, isAdmin } = useGameStore();
+
+  // Initialize Huawei IAP on app start
+  useEffect(() => {
+    huaweiIAP.init().then(available => {
+      if (available) {
+        console.log('Huawei IAP initialized successfully');
+        // Handle any pending purchases from previous sessions
+        huaweiIAP.handlePendingPurchases().then(({ coins, gems }) => {
+          if (coins > 0 || gems > 0) {
+            useGameStore.getState().updateUserCoins(coins);
+            useGameStore.getState().updateUserGems(gems);
+          }
+        });
+      }
+    });
+  }, []);
 
   // Maintenance mode check: show maintenance screen to non-admin users
   if (adminSettings.maintenanceMode && !isAdmin) {

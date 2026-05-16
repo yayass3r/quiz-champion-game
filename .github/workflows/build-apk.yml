@@ -1,9 +1,9 @@
-name: Build & Release APK (Huawei AppGallery Ready)
+name: Build APK
 
 on:
   push:
-    branches: [main]
-    tags: ['v*']
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -34,58 +34,44 @@ jobs:
 
       - name: Build Next.js static export
         run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
 
       - name: Sync Capacitor
         run: npx cap sync android
 
       - name: Build Debug APK
-        working-directory: android
-        run: ./gradlew assembleDebug
+        run: cd android && ./gradlew assembleDebug
 
-      - name: Upload Debug APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: quiz-champion-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Build Release APK
+        run: cd android && ./gradlew assembleRelease
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
-      - name: Build Release APK (unsigned for AppGallery)
-        working-directory: android
-        run: ./gradlew assembleRelease
-        continue-on-error: true
+      - name: Get version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
-      - name: Upload Release APK artifact
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: quiz-champion-release
-          path: android/app/build/outputs/apk/release/app-release.apk
-
-      - name: Create Release on Tag
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          body: |
+            ## بطل الأسئلة - Quiz Champion ${{ github.ref_name }}
+
+            ### رابط التحميل المباشر:
+            - [تحميل APK (Release)](https://github.com/yayass3r/quiz-champion-game/releases/latest/download/app-release.apk)
+            - [تحميل APK (Debug)](https://github.com/yayass3r/quiz-champion-game/releases/latest/download/app-debug.apk)
+
+            ### طريقة التثبيت:
+            1. حمّل ملف APK
+            2. فعّل "التثبيت من مصادر غير معروفة" في إعدادات الجهاز
+            3. افتح ملف APK واتبع خطوات التثبيت
           files: |
             android/app/build/outputs/apk/debug/app-debug.apk
             android/app/build/outputs/apk/release/app-release.apk
-          generate_release_notes: true
-          name: "بطل الأسئلة ${{ github.ref_name }}"
-          body: |
-            🏆 بطل الأسئلة - تحديث جديد!
-
-            📱 جاهز للرفع على متجر هواوي AppGallery
-
-            **ملفات التحميل:**
-            - `app-debug.apk` - نسخة تصحيح
-            - `app-release.apk` - نسخة الإنتاج (موقعة)
-
-            **دعم Huawei IAP:** ✅
-            - باقات استهلاكية (عملات + جواهر)
-            - إزالة الإعلانات (غير استهلاكية)
-            - عضوية VIP (اشتراك)
-
-            **متطلبات الرفع على AppGallery:**
-            1. رفع ملف `app-release.apk` الموقع
-            2. إعداد المنتجات IAP في AppGallery Connect
-            3. رفع لقطات الشاشة والوصف
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          draft: false
+          prerelease: false

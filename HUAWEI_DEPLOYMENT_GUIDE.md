@@ -15,7 +15,7 @@
 
 - **اسم التطبيق:** بطل الأسئلة / Quiz Champion
 - **اسم الحزمة:** com.quizchampion.game
-- **الإصدار:** 3.2.0
+- **الإصدار:** 3.4.0
 - **الفئة:** ألعاب / أسئلة وترفيه (Trivia / Educational)
 - **التقييم العمري:** 3+ (مناسب لجميع الأعمار)
 
@@ -122,7 +122,7 @@ Download now and become the Quiz Champion!
 1. من AppGallery Connect → **Project Settings**
 2. حمّل ملف `agconnect-services.json`
 3. ضعه في: `android/app/agconnect-services.json`
-4. حدث `YOUR_HUAWEI_APP_ID` في `AndroidManifest.xml`
+4. حدث `%HUAWEI_APP_ID%` في `AndroidManifest.xml` بمعرف تطبيقك من AppGallery Connect
 
 ## إعداد توقيع التطبيق
 
@@ -157,8 +157,8 @@ cd android && ./gradlew assembleRelease
 
 ### بناء تلقائي عبر GitHub Actions:
 ```bash
-git tag v3.3.0
-git push origin v3.3.0
+git tag v3.4.0
+git push origin v3.4.0
 ```
 سيتم بناء APK تلقائياً ورفعه كـ Release على GitHub.
 
@@ -170,8 +170,8 @@ git push origin v3.3.0
 2. انقر على **Version Information** → **New Version**
 3. رفع ملف APK الموقع
 4. املأ معلومات الإصدار:
-   - الإصدار: 3.2.0
-   - ملاحظات التحديث: دعم المشتريات من متجر هواوي + أيقونة جديدة + تحسينات
+   - الإصدار: 3.4.0
+   - ملاحظات التحديث: إصلاح شامل + تحسينات الأداء + تهيئة Huawei IAP تلقائية
 5. أضف أيقونة التطبيق: `public/icon-512.png` (512×512)
 6. أضف صورة العرض: `public/feature-graphic.png` (1024×500)
 7. أضف لقطات الشاشة (مطلوب 3-8 لقطات)

@@ -14,10 +14,11 @@
         android:networkSecurityConfig="@xml/network_security_config"
         android:usesCleartextTraffic="false">
 
-        <!-- Huawei HMS Core App ID -->
+        <!-- Huawei HMS Core App ID - Replace with your AppGallery Connect App ID -->
+        <!-- Get it from: AppGallery Connect > Project Settings > General -->
         <meta-data
             android:name="com.huawei.hms.client.appid"
-            android:value="appid=YOUR_HUAWEI_APP_ID" />
+            android:value="appid=%HUAWEI_APP_ID%" />
 
         <!-- Huawei Analytics -->
         <meta-data

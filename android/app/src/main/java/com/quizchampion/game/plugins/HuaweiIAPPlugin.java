@@ -11,7 +11,6 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
-import com.huawei.hms.api.HuaweiApiClient;
 import com.huawei.hms.common.ApiException;
 import com.huawei.hms.iap.Iap;
 import com.huawei.hms.iap.IapApiException;
@@ -23,7 +22,6 @@ import com.huawei.hms.iap.entity.ProductInfoResult;
 import com.huawei.hms.iap.entity.PurchaseIntentReq;
 import com.huawei.hms.iap.entity.PurchaseResultInfo;
 import com.huawei.hms.iap.entity.ConsumeOwnedPurchaseReq;
-import com.huawei.hms.iap.entity.ConsumeOwnedPurchaseResult;
 import com.huawei.hms.iap.entity.OwnedPurchasesReq;
 import com.huawei.hms.iap.entity.OwnedPurchasesResult;
 import com.huawei.hms.support.api.client.Status;
@@ -60,7 +58,6 @@ public class HuaweiIAPPlugin extends Plugin {
         JSObject result = new JSObject();
         try {
             if (iapClient != null) {
-                // Try to check HMS availability
                 boolean isAvailable = true;
                 result.put("available", isAvailable);
                 result.put("message", "HMS Services available");
@@ -91,7 +88,7 @@ public class HuaweiIAPPlugin extends Plugin {
             for (int i = 0; i < idsArray.length(); i++) {
                 productIdList.add(idsArray.getString(i));
             }
-            int priceType = call.getInt("type", 0); // 0=consumable, 1=non-consumable, 2=subscription
+            int priceType = call.getInt("type", 0);
 
             ProductInfoReq req = new ProductInfoReq();
             req.setProductIds(new ArrayList<>(productIdList));
@@ -111,7 +108,6 @@ public class HuaweiIAPPlugin extends Plugin {
                             product.put("currency", productInfo.getCurrency());
                             product.put("priceType", productInfo.getPriceType());
                             product.put("status", productInfo.getStatus());
-                            product.put("subValidPeriod", productInfo.getSubValidPeriod());
                             products.put(product);
                         }
                     }
@@ -171,7 +167,6 @@ public class HuaweiIAPPlugin extends Plugin {
                         savedPurchaseCall = null;
                     }
                 } else {
-                    // Purchase cannot proceed - may need to update HMS or other issue
                     int statusCode = status.getStatusCode();
                     String errorMsg = "Purchase cannot proceed (status: " + statusCode + ")";
                     if (statusCode == OrderStatusCode.ORDER_HWID_NOT_LOGIN) {
@@ -225,7 +220,6 @@ public class HuaweiIAPPlugin extends Plugin {
                     } else if (returnCode == OrderStatusCode.ORDER_STATE_CANCEL) {
                         call.reject("Purchase cancelled by user");
                     } else if (returnCode == OrderStatusCode.ORDER_PRODUCT_OWNED) {
-                        // Product already owned - should consume first
                         call.reject("Product already owned. Please consume it first.");
                     } else if (returnCode == OrderStatusCode.ORDER_STATE_FAILED) {
                         call.reject("Purchase failed");
@@ -261,13 +255,11 @@ public class HuaweiIAPPlugin extends Plugin {
 
             ConsumeOwnedPurchaseReq req = new ConsumeOwnedPurchaseReq();
             req.setPurchaseToken(purchaseToken);
-            // Set developer challenge for verification
             req.setDeveloperChallenge("quizchampion_consume_" + System.currentTimeMillis());
 
             iapClient.consumeOwnedPurchase(req).addOnSuccessListener(result -> {
                 JSObject response = new JSObject();
                 response.put("consumed", true);
-                response.put("purchaseToken", result.getPurchaseToken());
                 call.resolve(response);
             }).addOnFailureListener(e -> {
                 Log.e(TAG, "Consume failed: " + e.getMessage());
@@ -339,7 +331,6 @@ public class HuaweiIAPPlugin extends Plugin {
 
     /**
      * Restore all consumable purchases that haven't been consumed
-     * This is important for handling interrupted purchases
      */
     @PluginMethod
     public void restorePurchases(PluginCall call) {
@@ -348,7 +339,6 @@ public class HuaweiIAPPlugin extends Plugin {
             return;
         }
         try {
-            // Check consumable purchases
             OwnedPurchasesReq req = new OwnedPurchasesReq();
             req.setPriceType(0); // consumable
 

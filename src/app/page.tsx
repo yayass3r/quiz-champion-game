@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore, AdConfig } from '@/lib/game-store';
 import { useAuthStore } from '@/lib/auth-local';
 import { huaweiIAP, IAP_PRODUCT_MAP } from '@/lib/huawei-iap';
+import { huaweiAdsService, AD_UNIT_IDS } from '@/lib/huawei-ads';
 import { useWalletStore } from '@/lib/wallet-store';
 import { categoryInfo, QuestionCategory, questions as defaultQuestions } from '@/lib/questions';
 import { Progress } from '@/components/ui/progress';
@@ -560,12 +561,30 @@ function GameplayScreen() {
 
 // ===== Results Screen =====
 function ResultsScreen() {
-  const { score, correctCount, questions, maxCombo, playerCoins, playerLevel, setScreen, resetGame, playerGems, adminSettings } = useGameStore();
+  const { score, correctCount, questions, maxCombo, playerCoins, playerLevel, setScreen, resetGame, playerGems, adminSettings, updateUserCoins } = useGameStore();
   const totalQuestions = questions.length;
   const percentage = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
   const coinsEarned = Math.round(score * 0.1) + correctCount * adminSettings.coinRewardPerGame;
   const gemsEarned = correctCount === totalQuestions ? adminSettings.gemRewardPerfect : 0;
   const xpEarned = Math.round(score * 0.5 * adminSettings.xpMultiplier);
+  const [showWatchAdBonus, setShowWatchAdBonus] = useState(false);
+  const [watchingAd, setWatchingAd] = useState(false);
+
+  // Try to show interstitial ad after game
+  useEffect(() => {
+    const showInterstitial = async () => {
+      try {
+        await huaweiAdsService.initialize();
+        if (!await huaweiAdsService.isInterstitialAdLoaded()) {
+          await huaweiAdsService.loadInterstitialAd();
+        }
+        await huaweiAdsService.showInterstitialAd();
+      } catch {
+        // Interstitial ad not available, that's fine
+      }
+    };
+    showInterstitial();
+  }, []);
 
   // Record wallet transaction once on mount
   const recordedRef = useRef(false);
@@ -580,6 +599,31 @@ function ResultsScreen() {
       wallet.addTransaction({ type: 'reward', amount: gemsEarned, currency: 'gems', description: 'مكافأة إجابات كاملة' });
     }
   }, [coinsEarned, gemsEarned]);
+
+  const handleWatchAdForBonus = async () => {
+    try {
+      setWatchingAd(true);
+      await huaweiAdsService.initialize();
+      if (!await huaweiAdsService.isRewardAdLoaded()) {
+        await huaweiAdsService.loadRewardAd();
+      }
+      const result = await huaweiAdsService.showRewardAd();
+      if (result.rewarded) {
+        const bonusCoins = 50;
+        updateUserCoins(bonusCoins);
+        useWalletStore.getState().addTransaction({ type: 'reward', amount: bonusCoins, currency: 'coins', description: 'مكافأة مشاهدة إعلان بعد اللعبة' });
+        setShowWatchAdBonus(true);
+      }
+    } catch {
+      // Fallback: give bonus coins anyway for demo
+      const bonusCoins = 50;
+      updateUserCoins(bonusCoins);
+      useWalletStore.getState().addTransaction({ type: 'reward', amount: bonusCoins, currency: 'coins', description: 'مكافأة مشاهدة إعلان بعد اللعبة' });
+      setShowWatchAdBonus(true);
+    } finally {
+      setWatchingAd(false);
+    }
+  };
   const getGrade = () => {
     if (percentage >= 90) return { emoji: '🏆', text: 'أسطوري!', color: 'text-yellow-400' };
     if (percentage >= 70) return { emoji: '🌟', text: 'ممتاز!', color: 'text-emerald-400' };
@@ -614,6 +658,27 @@ function ResultsScreen() {
           <div className="flex items-center gap-1"><span>⬆️</span><span className="text-emerald-400 font-bold">+{xpEarned} XP</span></div>
         </div>
       </div>
+      {/* Watch Ad for Bonus */}
+      {!showWatchAdBonus && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
+          className="bg-gradient-to-r from-emerald-500/10 to-teal-600/10 border border-emerald-500/20 rounded-2xl p-4 mb-4 w-full max-w-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-emerald-400 font-bold text-sm">🎬 شاهد إعلان</div>
+              <div className="text-white/40 text-xs">واكسب 50 عملة إضافية!</div>
+            </div>
+            <GlowButton onClick={handleWatchAdForBonus} disabled={watchingAd} className="text-xs px-3 py-2">
+              {watchingAd ? '⏳...' : '🎁 +50 🪙'}
+            </GlowButton>
+          </div>
+        </motion.div>
+      )}
+      {showWatchAdBonus && (
+        <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+          className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-3 mb-4 w-full max-w-sm text-center">
+          <span className="text-emerald-400 text-sm font-bold">🎁 حصلت على 50 عملة إضافية!</span>
+        </motion.div>
+      )}
       <div className="flex flex-col gap-3 w-full max-w-sm">
         <GlowButton onClick={() => resetGame()} className="w-full">🔄 العب مرة أخرى</GlowButton>
         <GlowButton onClick={() => setScreen('menu')} variant="outline" className="w-full">🏠 القائمة الرئيسية</GlowButton>
@@ -715,11 +780,84 @@ function ProfileScreen() {
 
 // ===== Shop =====
 function ShopScreen() {
-  const { setScreen, shopItems, playerCoins, playerGems, buyShopItem } = useGameStore();
-  const [tab, setTab] = useState<'powerup' | 'avatar'>('powerup');
+  const { setScreen, shopItems, playerCoins, playerGems, buyShopItem, updateUserCoins } = useGameStore();
+  const [tab, setTab] = useState<'powerup' | 'avatar' | 'freeCoins'>('powerup');
+  const [watchingAd, setWatchingAd] = useState(false);
+  const [adReward, setAdReward] = useState<{ show: boolean; coins: number }>({ show: false, coins: 0 });
+  const [adLoaded, setAdLoaded] = useState(false);
+
+  // Check if reward ad is loaded
+  useEffect(() => {
+    const checkAd = async () => {
+      try {
+        await huaweiAdsService.initialize();
+        const loaded = await huaweiAdsService.isRewardAdLoaded();
+        setAdLoaded(loaded);
+      } catch {
+        setAdLoaded(false);
+      }
+    };
+    if (tab === 'freeCoins') checkAd();
+  }, [tab]);
+
+  const handleWatchAd = async () => {
+    try {
+      setWatchingAd(true);
+      // Initialize if needed
+      await huaweiAdsService.initialize();
+      
+      // Load ad if not loaded
+      if (!await huaweiAdsService.isRewardAdLoaded()) {
+        await huaweiAdsService.loadRewardAd();
+      }
+      
+      // Show the reward ad
+      const result = await huaweiAdsService.showRewardAd();
+      
+      if (result.rewarded) {
+        const coinsEarned = 25;
+        updateUserCoins(coinsEarned);
+        useWalletStore.getState().addTransaction({ type: 'reward', amount: coinsEarned, currency: 'coins', description: 'مكافأة مشاهدة الإعلان' });
+        setAdReward({ show: true, coins: coinsEarned });
+      }
+    } catch (error) {
+      console.log('Ad not available, giving coins anyway for demo:', error);
+      // Fallback: give coins even if ad fails (for non-Huawei devices)
+      const coinsEarned = 25;
+      updateUserCoins(coinsEarned);
+      useWalletStore.getState().addTransaction({ type: 'reward', amount: coinsEarned, currency: 'coins', description: 'مكافأة مشاهدة الإعلان' });
+      setAdReward({ show: true, coins: coinsEarned });
+    } finally {
+      setWatchingAd(false);
+    }
+  };
+
   const filteredItems = shopItems.filter(i => i.type === tab);
   return (
     <motion.div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 p-4" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+      {/* Ad Reward Popup */}
+      <AnimatePresence>
+        {adReward.show && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setAdReward({ show: false, coins: 0 })}>
+            <motion.div initial={{ scale: 0.5 }} animate={{ scale: 1 }} exit={{ scale: 0.5 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-gradient-to-br from-emerald-500/20 to-teal-600/20 border border-emerald-500/30 rounded-3xl p-6 max-w-sm w-full text-center">
+              <motion.div animate={{ rotate: [0, 10, -10, 0], scale: [1, 1.2, 1] }} transition={{ duration: 0.5 }} className="text-6xl mb-3">🎁</motion.div>
+              <h3 className="text-emerald-400 font-extrabold text-xl mb-2">شكراً لمشاهدتك!</h3>
+              <div className="bg-emerald-500/10 rounded-2xl p-4 mb-4">
+                <div className="flex items-center justify-center gap-2">
+                  <span className="text-3xl">🪙</span>
+                  <span className="text-3xl font-extrabold text-yellow-400">+{adReward.coins}</span>
+                </div>
+                <div className="text-white/40 text-xs mt-1">تم إضافة العملات لحسابك</div>
+              </div>
+              <GlowButton onClick={() => setAdReward({ show: false, coins: 0 })} className="w-full">🎉 رائع!</GlowButton>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <motion.button whileTap={{ scale: 0.9 }} onClick={() => setScreen('menu')} className="text-white/60 hover:text-white text-2xl">→</motion.button>
@@ -728,29 +866,61 @@ function ShopScreen() {
         <CoinDisplay />
       </div>
       <div className="flex gap-2 mb-4">
-        {(['powerup', 'avatar'] as const).map(t => (
+        {(['powerup', 'avatar', 'freeCoins'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${tab === t ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' : 'bg-white/5 text-white/40'}`}>
-            {t === 'powerup' ? '⚡ أدوات مساعدة' : '🎭 الأفاتارات'}
+            {t === 'powerup' ? '⚡ أدوات' : t === 'avatar' ? '🎭 أفاتارات' : '🎁 عملات مجانية'}
           </button>
         ))}
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        {filteredItems.map(item => (
-          <motion.div key={item.id} whileHover={{ scale: 1.02 }} className={`bg-white/5 rounded-2xl p-4 text-center ${item.type === 'avatar' && item.owned ? 'border border-emerald-500/20' : ''}`}>
-            <div className="text-3xl mb-2">{item.icon}</div>
-            <div className="text-white font-bold text-sm mb-1">{item.name}</div>
-            <div className="text-white/40 text-xs mb-3">{item.description}</div>
-            {item.type === 'avatar' && item.owned ? (
-              <span className="text-emerald-400 text-xs font-bold">✅ مملوك</span>
-            ) : (
-              <GlowButton onClick={() => buyShopItem(item.id)}
-                disabled={(item.currency === 'coins' && playerCoins < item.cost) || (item.currency === 'gems' && playerGems < item.cost)}
-                className="text-xs px-3 py-1.5">{item.currency === 'coins' ? '🪙' : '💎'} {item.cost}</GlowButton>
-            )}
+      
+      {tab === 'freeCoins' ? (
+        <div className="space-y-4">
+          {/* Watch Ad Card */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+            className="bg-gradient-to-br from-emerald-500/10 to-teal-600/10 border border-emerald-500/20 rounded-2xl p-6 text-center">
+            <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ duration: 2, repeat: Infinity }} className="text-5xl mb-3">🎬</motion.div>
+            <h3 className="text-emerald-400 font-bold text-lg mb-2">شاهد إعلان واكسب عملات!</h3>
+            <p className="text-white/40 text-sm mb-4">شاهد إعلان قصير واحصل على 25 عملة مجاناً</p>
+            <GlowButton onClick={handleWatchAd} disabled={watchingAd} className="w-full">
+              {watchingAd ? '⏳ جارٍ تشغيل الإعلان...' : '🎁 شاهد الإعلان (+25 🪙)'}
+            </GlowButton>
           </motion.div>
-        ))}
-      </div>
+
+          {/* Daily Free Coins Info */}
+          <div className="bg-gradient-to-br from-yellow-500/10 to-amber-600/10 border border-yellow-500/20 rounded-2xl p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-2xl">💡</span>
+              <div>
+                <div className="text-yellow-400 font-bold text-sm">طرق أخرى للحصول على عملات</div>
+              </div>
+            </div>
+            <div className="space-y-2 text-sm text-white/50">
+              <div className="flex items-center gap-2"><span>📅</span> سجل دخولك يومياً واحصل على مكافأة</div>
+              <div className="flex items-center gap-2"><span>🎯</span> أجب على الأسئلة واجمع النقاط</div>
+              <div className="flex items-center gap-2"><span>🔥</span> حقق سلسلة إجابات صحيحة لمكافآت إضافية</div>
+              <div className="flex items-center gap-2"><span>🎰</span> جرب حظك بعجلة الحظ</div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          {filteredItems.map(item => (
+            <motion.div key={item.id} whileHover={{ scale: 1.02 }} className={`bg-white/5 rounded-2xl p-4 text-center ${item.type === 'avatar' && item.owned ? 'border border-emerald-500/20' : ''}`}>
+              <div className="text-3xl mb-2">{item.icon}</div>
+              <div className="text-white font-bold text-sm mb-1">{item.name}</div>
+              <div className="text-white/40 text-xs mb-3">{item.description}</div>
+              {item.type === 'avatar' && item.owned ? (
+                <span className="text-emerald-400 text-xs font-bold">✅ مملوك</span>
+              ) : (
+                <GlowButton onClick={() => buyShopItem(item.id)}
+                  disabled={(item.currency === 'coins' && playerCoins < item.cost) || (item.currency === 'gems' && playerGems < item.cost)}
+                  className="text-xs px-3 py-1.5">{item.currency === 'coins' ? '🪙' : '💎'} {item.cost}</GlowButton>
+              )}
+            </motion.div>
+          ))}
+        </div>
+      )}
     </motion.div>
   );
 }

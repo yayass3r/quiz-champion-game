@@ -82,3 +82,44 @@
 -keepclassmembers class com.huawei.hms.iap.entity.PurchaseResultInfo {
     *;
 }
+
+# ============================================================
+# Huawei HMS Core - Ads Kit (Petal Ads)
+# ============================================================
+-keep class com.huawei.hms.ads.** { *; }
+-keep class com.huawei.openalliance.ad.** { *; }
+-keep class com.huawei.hms.ads.consent.** { *; }
+-keep class com.huawei.hms.ads.identifier.** { *; }
+-keep class com.huawei.hms.ads.installreferrer.** { *; }
+
+# Keep ad view classes
+-keep public class com.huawei.hms.ads.BannerAd {
+    public *;
+}
+-keep public class com.huawei.hms.ads.InterstitialAd {
+    public *;
+}
+-keep public class com.huawei.hms.ads.RewardAd {
+    public *;
+}
+-keep public class com.huawei.hms.ads.NativeAd {
+    public *;
+}
+
+# Keep ad listener interfaces
+-keepclassmembers class * implements com.huawei.hms.ads.rewarded.RewardAdStatusListener {
+    *;
+}
+-keepclassmembers class * implements com.huawei.hms.ads.rewarded.RewardAdLoadListener {
+    *;
+}
+-keepclassmembers class * implements com.huawei.hms.ads.interstitial.InterstitialAdLoadListener {
+    *;
+}
+-keepclassmembers class * implements com.huawei.hms.ads.AdListener {
+    *;
+}
+
+# Suppress warnings for Huawei Ads
+-dontwarn com.huawei.hms.ads.**
+-dontwarn com.huawei.openalliance.ad.**

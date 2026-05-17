@@ -26,6 +26,9 @@
     },
     "push": {
       "available": true
+    },
+    "ads": {
+      "available": true
     }
   },
   "client": {

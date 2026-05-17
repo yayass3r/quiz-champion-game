@@ -8,8 +8,8 @@ android {
         applicationId "com.quizchampion.game"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 10
-        versionName "3.5.0"
+        versionCode 11
+        versionName "3.6.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -79,6 +79,11 @@ dependencies {
     implementation 'com.huawei.agconnect:agconnect-core:1.9.1.301'
     // Huawei HMS Core - Push (optional for notifications)
     implementation 'com.huawei.hms:push:6.12.0.300'
+    // Huawei HMS Core - Ads Kit (Petal Ads for monetization)
+    implementation 'com.huawei.hms:ads-prime:3.4.74.300'
+    implementation 'com.huawei.hms:ads-consent:3.4.74.300'
+    implementation 'com.huawei.hms:ads-identifier:3.4.74.300'
+    implementation 'com.huawei.hms:ads-installreferrer:3.4.74.300'
 }
 
 apply from: 'capacitor.build.gradle'

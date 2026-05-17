@@ -7,8 +7,8 @@
     "package_name": "com.quizchampion.game",
     "app_name": "بطل الأسئلة",
     "version": {
-      "name": "3.2.0",
-      "code": "7"
+      "name": "3.5.0",
+      "code": "10"
     },
     "agconnect": {
       "apigw": {

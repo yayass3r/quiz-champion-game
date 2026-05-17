@@ -5,7 +5,7 @@ import { persist } from 'zustand/middleware';
 import { useAuthStore, LocalUser } from './auth-local';
 import { useGameStore } from './game-store';
 
-export type TransactionType = 'earn' | 'spend' | 'transfer_in' | 'transfer_out' | 'bonus' | 'reward';
+export type TransactionType = 'earn' | 'spend' | 'purchase' | 'transfer_in' | 'transfer_out' | 'bonus' | 'reward';
 export type CurrencyType = 'coins' | 'gems';
 
 export interface Transaction {

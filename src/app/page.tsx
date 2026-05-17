@@ -103,7 +103,7 @@ function SplashScreen() {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}>
         <GlowButton onClick={() => setScreen('login')} className="text-lg px-12 py-4">🚀 ابدأ المغامرة</GlowButton>
       </motion.div>
-      <motion.p className="text-xs text-white/20 mt-8" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}>الإصدار 3.4 — إصلاح شامل + تحسينات الأداء</motion.p>
+      <motion.p className="text-xs text-white/20 mt-8" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}>الإصدار 3.5 — إصلاح مشاكل النشر + تحسينات</motion.p>
     </motion.div>
   );
 }
@@ -981,7 +981,7 @@ function SettingsScreen() {
         </a>
       </div>
       <div className="mt-4 text-center">
-        <p className="text-white/20 text-[10px]">بطل الأسئلة - الإصدار 3.3.0</p>
+        <p className="text-white/20 text-[10px]">بطل الأسئلة - الإصدار 3.5.0</p>
         <p className="text-white/15 text-[10px]">com.quizchampion.game</p>
       </div>
       {isLoggedIn && <GlowButton onClick={() => { useAuthStore.getState().logout(); logout(); }} variant="danger" className="w-full mt-6">🚪 تسجيل الخروج</GlowButton>}
@@ -2945,7 +2945,7 @@ function PrivacyPolicyScreen() {
           <p>إذا كان لديك أي أسئلة أو استفسارات حول سياسة الخصوصية أو معالجة البيانات، يمكنك التواصل معنا عبر البريد الإلكتروني: admin@quizchampion.com</p>
         </div>
         <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 text-center text-yellow-400/70 text-xs">
-          آخر تحديث: أبريل 2026 | الإصدار 3.1.0
+          آخر تحديث: مايو 2026 | الإصدار 3.5.0
         </div>
       </div>
     </motion.div>

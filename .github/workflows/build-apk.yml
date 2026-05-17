@@ -40,19 +40,47 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
+      - name: Generate debug keystore
+        run: |
+          cd android/app
+          keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -storepass android -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+
+      - name: Generate release keystore
+        run: |
+          cd android/app
+          KEYSTORE_PASSWORD_VAL="${{ secrets.KEYSTORE_PASSWORD }}"
+          KEY_ALIAS_VAL="${{ secrets.KEY_ALIAS }}"
+          KEY_PASSWORD_VAL="${{ secrets.KEY_PASSWORD }}"
+          
+          # Use secrets if available, otherwise use defaults
+          STORE_PASS="${KEYSTORE_PASSWORD_VAL:-quizchampion123}"
+          ALIAS="${KEY_ALIAS_VAL:-quiz-champion}"
+          KEY_PASS="${KEY_PASSWORD_VAL:-quizchampion123}"
+          
+          keytool -genkey -v -keystore ../quiz-champion-release.keystore -alias "$ALIAS" -storepass "$STORE_PASS" -keypass "$KEY_PASS" -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Quiz Champion,O=QuizChampion,C=SA"
+          
+          # Export variables for build step
+          echo "KEYSTORE_PASSWORD=$STORE_PASS" >> $GITHUB_ENV
+          echo "KEY_ALIAS=$ALIAS" >> $GITHUB_ENV
+          echo "KEY_PASSWORD=$KEY_PASS" >> $GITHUB_ENV
+
       - name: Build Debug APK
         run: cd android && ./gradlew assembleDebug
 
       - name: Build Release APK
         run: cd android && ./gradlew assembleRelease
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
       - name: Get version from tag
         id: get_version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Verify APK files exist
+        run: |
+          echo "Checking APK files..."
+          ls -la android/app/build/outputs/apk/debug/ || echo "Debug APK dir not found"
+          ls -la android/app/build/outputs/apk/release/ || echo "Release APK dir not found"
+          test -f android/app/build/outputs/apk/debug/app-debug.apk && echo "✅ Debug APK found" || echo "❌ Debug APK missing"
+          test -f android/app/build/outputs/apk/release/app-release.apk && echo "✅ Release APK found" || echo "❌ Release APK missing"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -70,6 +98,11 @@ jobs:
             1. حمّل ملف APK
             2. فعّل "التثبيت من مصادر غير معروفة" في إعدادات الجهاز
             3. افتح ملف APK واتبع خطوات التثبيت
+
+            ### ما الجديد:
+            - إصلاح مشاكل البناء في GitHub Actions
+            - تحديث تكوين Huawei HMS
+            - تحسينات في الأداء والاستقرار
           files: |
             android/app/build/outputs/apk/debug/app-debug.apk
             android/app/build/outputs/apk/release/app-release.apk

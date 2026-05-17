@@ -19,7 +19,7 @@
         <!-- Example: android:value="appid=123456789" -->
         <meta-data
             android:name="com.huawei.hms.client.appid"
-            android:value="appid=YOUR_HUAWEI_APP_ID" />
+            android:value="appid=6917605804441958013" />
 
         <!-- Huawei Analytics -->
         <meta-data

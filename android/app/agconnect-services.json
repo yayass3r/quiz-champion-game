@@ -3,7 +3,7 @@
     "config_version": "3"
   },
   "app_info": {
-    "app_id": "YOUR_HUAWEI_APP_ID",
+    "app_id": "6917605804441958013",
     "package_name": "com.quizchampion.game",
     "app_name": "بطل الأسئلة",
     "version": {
@@ -29,13 +29,13 @@
     }
   },
   "client": {
-    "cp_id": "YOUR_CP_ID",
-    "product_id": "YOUR_PRODUCT_ID",
-    "client_id": "YOUR_CLIENT_ID",
-    "client_secret": "YOUR_CLIENT_SECRET",
-    "app_id": "YOUR_HUAWEI_APP_ID",
+    "cp_id": "6917605804441958013",
+    "product_id": "6917605804441958013",
+    "client_id": "6917605804441958013",
+    "client_secret": "db9103649cfedd00d89eef2a4736d07d481edb7c0ef6390c3c8b8c03bafa8960",
+    "app_id": "6917605804441958013",
     "package_name": "com.quizchampion.game",
-    "sha256_cert_fingerprints": ["YOUR_SHA256_FINGERPRINT"]
+    "sha256_cert_fingerprints": ["TO_BE_FILLED_AFTER_SIGNING"]
   },
   "configuration_version": "1.0"
 }

@@ -37,5 +37,11 @@
     "package_name": "com.quizchampion.game",
     "sha256_cert_fingerprints": ["TO_BE_FILLED_AFTER_SIGNING"]
   },
+  "publishing": {
+    "api_client_id": "1952658469957942464",
+    "api_client_key": "79597EAFA84F5B65F3ECA6A0DC9E9E550091DF4FB379117C08F41F3EC959024B",
+    "service_account_id": "117746493",
+    "service_account_key_id": "69a81cec98bf4f2cba5ffc3bd39b23bb"
+  },
   "configuration_version": "1.0"
 }

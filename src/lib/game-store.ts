@@ -4,13 +4,16 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Question, QuestionCategory, getQuestions, getRandomQuestions, getSurvivalQuestions, categoryInfo, questions as defaultQuestions, registerCustomQuestions } from './questions';
 import { useAuthStore } from './auth-local';
+import { useWalletStore } from './wallet-store';
 
 export type GameMode = 'classic' | 'speed' | 'survival' | 'marathon' | 'daily' | 'teamBattle';
+export type GameDifficulty = 'easy' | 'medium' | 'hard' | 'expert';
 export type GameScreen =
   | 'splash'
   | 'login'
   | 'menu'
   | 'modeSelect'
+  | 'difficultySelect'
   | 'categorySelect'
   | 'gameplay'
   | 'results'
@@ -61,6 +64,31 @@ export interface Announcement {
   id: string; title: string; message: string; type: 'info' | 'warning' | 'reward'; createdAt: string; isActive: boolean;
 }
 
+export interface DifficultyConfig {
+  cost: number;           // Cost in coins to enter game
+  rewardMultiplier: number; // Coin reward multiplier on win
+  lossPenalty: number;    // Coins lost on loss
+  gemReward: number;      // Gems earned on perfect game
+  questionsCount: number; // Number of questions
+  timePerQuestion: number; // Seconds per question
+}
+
+export const DIFFICULTY_CONFIGS: Record<GameDifficulty, DifficultyConfig> = {
+  easy:   { cost: 10,  rewardMultiplier: 1.0, lossPenalty: 5,   gemReward: 1, questionsCount: 10, timePerQuestion: 25 },
+  medium: { cost: 25,  rewardMultiplier: 1.8, lossPenalty: 15,  gemReward: 2, questionsCount: 12, timePerQuestion: 20 },
+  hard:   { cost: 50,  rewardMultiplier: 3.0, lossPenalty: 30,  gemReward: 4, questionsCount: 15, timePerQuestion: 15 },
+  expert: { cost: 100, rewardMultiplier: 5.0, lossPenalty: 60,  gemReward: 8, questionsCount: 15, timePerQuestion: 12 },
+};
+
+export const DIFFICULTY_INFO: Record<GameDifficulty, { name: string; icon: string; color: string; desc: string }> = {
+  easy:   { name: 'سهل',     icon: '🟢', color: 'from-emerald-500 to-green-600', desc: 'أسئلة سهلة - مكافأة قليلة - مخاطرة قليلة' },
+  medium: { name: 'متوسط',   icon: '🟡', color: 'from-yellow-500 to-amber-600',  desc: 'تحدي متوازن - مكافأة جيدة' },
+  hard:   { name: 'صعب',     icon: '🔴', color: 'from-red-500 to-rose-600',       desc: 'أسئلة صعبة - مكافأة كبيرة - مخاطرة عالية' },
+  expert: { name: 'خبير',    icon: '💎', color: 'from-purple-500 to-violet-600',  desc: 'أقوى تحدي - أعلى مكافأة - أعلى مخاطرة!' },
+};
+
+export const SPIN_WHEEL_COST = 50;
+
 export interface AdminSettings {
   welcomeCoins: number; welcomeGems: number; dailyBonusCoins: number; transferFeeCoins: number; transferFeeGems: number;
   minTransferAmount: number; coinRewardPerGame: number; gemRewardPerfect: number; xpMultiplier: number;
@@ -77,11 +105,12 @@ export interface GameState {
   playerName: string; playerAvatar: string; playerLevel: number; playerXP: number;
   playerCoins: number; playerGems: number; totalScore: number;
   gamesPlayed: number; gamesWon: number; currentStreak: number; bestStreak: number;
-  currentMode: GameMode; currentCategory: QuestionCategory | null;
+  currentMode: GameMode; currentDifficulty: GameDifficulty; currentCategory: QuestionCategory | null;
   questions: Question[]; currentQuestionIndex: number; score: number;
   correctCount: number; timeRemaining: number; isTimerActive: boolean;
   answeredCurrent: boolean; selectedAnswer: number | null; isCorrect: boolean | null;
   comboCount: number; maxCombo: number; usedPowerUps: string[];
+  entryCost: number; // Coins deducted when entering game
   powerUps: PowerUp[]; currentTeam: TeamData | null; teams: TeamData[];
   leaderboard: LeaderboardEntry[]; achievements: Achievement[]; shopItems: ShopItem[];
   dailyCompleted: boolean; dailyScore: number; lastDailyDate: string;
@@ -98,7 +127,7 @@ export interface GameState {
 
   setScreen: (screen: GameScreen) => void;
   goBack: () => void;
-  startGame: (mode: GameMode, category?: QuestionCategory) => void;
+  startGame: (mode: GameMode, category?: QuestionCategory, difficulty?: GameDifficulty) => void;
   answerQuestion: (answerIndex: number) => void;
   nextQuestion: () => void;
   usePowerUp: (powerUpId: string) => void;
@@ -214,11 +243,11 @@ export const useGameStore = create<GameState>()(
       playerName: 'لاعب', playerAvatar: '🦁', playerLevel: 1, playerXP: 0,
       playerCoins: 100, playerGems: 5, totalScore: 0,
       gamesPlayed: 0, gamesWon: 0, currentStreak: 0, bestStreak: 0,
-      currentMode: 'classic', currentCategory: null,
+      currentMode: 'classic', currentDifficulty: 'easy', currentCategory: null,
       questions: [], currentQuestionIndex: 0, score: 0,
       correctCount: 0, timeRemaining: 0, isTimerActive: false,
       answeredCurrent: false, selectedAnswer: null, isCorrect: null,
-      comboCount: 0, maxCombo: 0, usedPowerUps: [],
+      comboCount: 0, maxCombo: 0, usedPowerUps: [], entryCost: 0,
       powerUps: initialPowerUps, currentTeam: null, teams: initialTeams,
       leaderboard: initialLeaderboard, achievements: initialAchievements, shopItems: initialShopItems,
       dailyCompleted: false, dailyScore: 0, lastDailyDate: '',
@@ -237,23 +266,71 @@ export const useGameStore = create<GameState>()(
       setScreen: (screen) => set((state) => ({ previousScreen: state.currentScreen, currentScreen: screen })),
       goBack: () => set((state) => ({ currentScreen: state.previousScreen || 'menu', previousScreen: null })),
 
-      startGame: (mode, category) => {
-        let gameQuestions: Question[] = []; let timePerQuestion = 20;
+      startGame: (mode, category, difficulty) => {
+        const diff = difficulty || 'easy';
+        const config = DIFFICULTY_CONFIGS[diff];
+        const state = get();
+        
+        // Check if player can afford the entry cost
+        if (state.playerCoins < config.cost) return; // Not enough coins
+        
+        // Deduct entry cost
+        const newCoins = state.playerCoins - config.cost;
+        
+        let gameQuestions: Question[] = []; 
+        let timePerQuestion = config.timePerQuestion;
+        const qCount = config.questionsCount;
+        const diffFilter = diff as Question['difficulty'];
+        
         switch (mode) {
-          case 'classic': gameQuestions = category ? getQuestions(category, undefined, 10) : getRandomQuestions(10); timePerQuestion = 20; break;
-          case 'speed': gameQuestions = category ? getQuestions(category, 'easy', 15) : getQuestions(undefined, 'easy', 15); timePerQuestion = 8; break;
-          case 'survival': gameQuestions = getSurvivalQuestions(20); timePerQuestion = 15; break;
-          case 'marathon': gameQuestions = getRandomQuestions(30); timePerQuestion = 30; break;
-          case 'daily': gameQuestions = getRandomQuestions(10); timePerQuestion = 20; break;
-          case 'teamBattle': gameQuestions = getRandomQuestions(15); timePerQuestion = 15; break;
+          case 'classic': 
+            gameQuestions = category 
+              ? getQuestions(category, diff === 'easy' ? undefined : diffFilter, qCount) 
+              : (diff === 'easy' 
+                ? getRandomQuestions(qCount) 
+                : getQuestions(undefined, diffFilter, qCount)); 
+            break;
+          case 'speed': 
+            gameQuestions = category 
+              ? getQuestions(category, diffFilter, qCount) 
+              : getQuestions(undefined, diffFilter, qCount); 
+            timePerQuestion = Math.max(5, config.timePerQuestion - 5);
+            break;
+          case 'survival': 
+            gameQuestions = getSurvivalQuestions(20); 
+            break;
+          case 'marathon': 
+            gameQuestions = diff === 'easy' 
+              ? getRandomQuestions(30) 
+              : getQuestions(undefined, diffFilter, 30); 
+            timePerQuestion = config.timePerQuestion;
+            break;
+          case 'daily': 
+            gameQuestions = getRandomQuestions(qCount); 
+            break;
+          case 'teamBattle': 
+            gameQuestions = getQuestions(undefined, diffFilter, qCount); 
+            break;
         }
+        
+        // Fallback: if not enough questions for this difficulty, mix with random
+        if (gameQuestions.length < 5) {
+          const extras = getRandomQuestions(qCount - gameQuestions.length);
+          gameQuestions = [...gameQuestions, ...extras];
+        }
+        
         set({
-          currentMode: mode, currentCategory: category || null, questions: gameQuestions,
+          currentMode: mode, currentDifficulty: diff, currentCategory: category || null, 
+          questions: gameQuestions,
           currentQuestionIndex: 0, score: 0, correctCount: 0,
           timeRemaining: timePerQuestion, isTimerActive: true,
           answeredCurrent: false, selectedAnswer: null, isCorrect: null,
-          comboCount: 0, maxCombo: 0, usedPowerUps: [], currentScreen: 'gameplay',
+          comboCount: 0, maxCombo: 0, usedPowerUps: [], entryCost: config.cost,
+          playerCoins: newCoins, currentScreen: 'gameplay',
         });
+        
+        // Record entry cost in wallet
+        const wallet = useWalletStore ? null : null; // wallet will be recorded from page.tsx
       },
 
       answerQuestion: (answerIndex) => {
@@ -325,18 +402,26 @@ export const useGameStore = create<GameState>()(
       endGame: () => {
         const state = get();
         const adminSettings = state.adminSettings;
-        const xpEarned = Math.round(state.score * 0.5 * adminSettings.xpMultiplier);
-        const coinsEarned = Math.round(state.score * 0.1) + (state.correctCount * adminSettings.coinRewardPerGame);
-        const gemsEarned = state.correctCount === state.questions.length ? adminSettings.gemRewardPerfect : 0;
+        const diffConfig = DIFFICULTY_CONFIGS[state.currentDifficulty];
+        const isWon = state.correctCount >= Math.ceil(state.questions.length * 0.6);
+        
+        // Calculate rewards based on difficulty
+        const baseCoinsEarned = Math.round(state.score * 0.1) + (state.correctCount * adminSettings.coinRewardPerGame);
+        const coinsEarned = isWon ? Math.round(baseCoinsEarned * diffConfig.rewardMultiplier) : 0;
+        const lossPenalty = isWon ? 0 : diffConfig.lossPenalty;
+        const gemsEarned = state.correctCount === state.questions.length ? diffConfig.gemReward : (isWon ? Math.floor(diffConfig.gemReward / 2) : 0);
+        const xpEarned = Math.round(state.score * 0.5 * adminSettings.xpMultiplier * diffConfig.rewardMultiplier);
+        
         const newXP = state.playerXP + xpEarned;
         let newLevel = state.playerLevel;
         let remainingXP = newXP;
-        // FIX: Handle multiple level-ups properly
         while (remainingXP >= getXPForLevel(newLevel)) {
           remainingXP -= getXPForLevel(newLevel);
           newLevel++;
         }
-        const isWon = state.correctCount >= Math.ceil(state.questions.length * 0.6);
+        
+        const finalCoins = Math.max(0, state.playerCoins + coinsEarned - lossPenalty);
+        
         const newLeaderboard = [...state.leaderboard];
         const playerIndex = newLeaderboard.findIndex(e => e.isPlayer);
         if (playerIndex >= 0) {
@@ -347,7 +432,7 @@ export const useGameStore = create<GameState>()(
         set({
           currentScreen: 'results', isTimerActive: false,
           playerLevel: newLevel, playerXP: newXP,
-          playerCoins: state.playerCoins + coinsEarned, playerGems: state.playerGems + gemsEarned,
+          playerCoins: finalCoins, playerGems: state.playerGems + gemsEarned,
           totalScore: state.totalScore + state.score, gamesPlayed: state.gamesPlayed + 1,
           gamesWon: state.gamesWon + (isWon ? 1 : 0), leaderboard: newLeaderboard,
         });
@@ -365,10 +450,10 @@ export const useGameStore = create<GameState>()(
       },
 
       resetGame: () => set({
-        currentScreen: 'menu', currentMode: 'classic', currentCategory: null,
+        currentScreen: 'menu', currentMode: 'classic', currentDifficulty: 'easy', currentCategory: null,
         questions: [], currentQuestionIndex: 0, score: 0, correctCount: 0,
         timeRemaining: 0, isTimerActive: false, answeredCurrent: false,
-        selectedAnswer: null, isCorrect: null, comboCount: 0, maxCombo: 0, usedPowerUps: [],
+        selectedAnswer: null, isCorrect: null, comboCount: 0, maxCombo: 0, usedPowerUps: [], entryCost: 0,
       }),
 
       setPlayerName: (name) => set({ playerName: name }),

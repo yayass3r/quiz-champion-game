@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useGameStore, AdConfig } from '@/lib/game-store';
+import { useGameStore, AdConfig, GameDifficulty, DIFFICULTY_CONFIGS, DIFFICULTY_INFO, SPIN_WHEEL_COST } from '@/lib/game-store';
 import { useAuthStore } from '@/lib/auth-local';
 import { huaweiIAP, IAP_PRODUCT_MAP } from '@/lib/huawei-iap';
 import { huaweiAdsService, AD_UNIT_IDS } from '@/lib/huawei-ads';
@@ -104,7 +104,7 @@ function SplashScreen() {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}>
         <GlowButton onClick={() => setScreen('login')} className="text-lg px-12 py-4">🚀 ابدأ المغامرة</GlowButton>
       </motion.div>
-      <motion.p className="text-xs text-white/20 mt-8" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}>الإصدار 3.5 — إصلاح مشاكل النشر + تحسينات</motion.p>
+      <motion.p className="text-xs text-white/20 mt-8" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}>الإصدار 4.0 — نظام الصعوبة + خصم العملات + توافق HarmonyOS</motion.p>
     </motion.div>
   );
 }
@@ -356,10 +356,11 @@ function MainMenu() {
 
 // ===== Mode Selection =====
 function ModeSelectScreen() {
-  const { setScreen, startGame } = useGameStore();
+  const { setScreen, playerCoins } = useGameStore();
+  const [selectedMode, setSelectedMode] = useState<GameMode | null>(null);
   const modes = [
-    { id: 'classic' as const, icon: '🎯', name: 'الكلاسيكي', desc: '10 أسئلة - 20 ثانية', color: 'from-yellow-500 to-amber-600' },
-    { id: 'speed' as const, icon: '⚡', name: 'السرعة', desc: '15 سؤال - 8 ثوان!', color: 'from-red-500 to-rose-600' },
+    { id: 'classic' as const, icon: '🎯', name: 'الكلاسيكي', desc: 'أسئلة متنوعة بوقت محدد', color: 'from-yellow-500 to-amber-600' },
+    { id: 'speed' as const, icon: '⚡', name: 'السرعة', desc: 'أسرع إجابة تفوز!', color: 'from-red-500 to-rose-600' },
     { id: 'survival' as const, icon: '🏕️', name: 'البقاء', desc: 'أخطئ واخرج!', color: 'from-emerald-500 to-teal-600' },
     { id: 'marathon' as const, icon: '🏃', name: 'الماراثون', desc: '30 سؤال تحدي طويل', color: 'from-purple-500 to-violet-600' },
     { id: 'daily' as const, icon: '📅', name: 'اليومي', desc: 'تحدي يومي خاص', color: 'from-blue-500 to-cyan-600' },
@@ -367,43 +368,128 @@ function ModeSelectScreen() {
   ];
   return (
     <motion.div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 p-4" variants={pageVariants} initial="initial" animate="animate" exit="exit">
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-3 mb-4">
         <motion.button whileTap={{ scale: 0.9 }} onClick={() => setScreen('menu')} className="text-white/60 hover:text-white text-2xl">→</motion.button>
         <h2 className="text-xl font-bold text-white">اختر نمط اللعب</h2>
+      </div>
+      <div className="flex items-center gap-2 mb-4 bg-yellow-500/10 rounded-xl p-3 border border-yellow-500/20">
+        <span className="text-lg">🪙</span>
+        <span className="text-yellow-400 font-bold">{playerCoins} عملة متاحة</span>
       </div>
       <div className="space-y-3">
         {modes.map((mode, i) => (
           <motion.button key={mode.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.08 }}
-            whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => startGame(mode.id)}
-            className={`w-full bg-gradient-to-r ${mode.color} rounded-2xl p-4 flex items-center gap-4 text-right`}>
+            whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => setSelectedMode(mode.id)}
+            className={`w-full bg-gradient-to-r ${mode.color} rounded-2xl p-4 flex items-center gap-4 text-right ${selectedMode === mode.id ? 'ring-2 ring-white/50' : ''}`}>
             <span className="text-3xl">{mode.icon}</span>
             <div className="flex-1"><div className="text-white font-bold">{mode.name}</div><div className="text-white/70 text-sm">{mode.desc}</div></div>
             <span className="text-white/50 text-xl">‹</span>
           </motion.button>
         ))}
       </div>
-      <div className="mt-4">
+      {selectedMode && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mt-4">
+          <GlowButton onClick={() => setScreen('difficultySelect')} className="w-full text-lg py-4">
+            ⚡ اختر مستوى الصعوبة
+          </GlowButton>
+        </motion.div>
+      )}
+      <div className="mt-3">
         <GlowButton onClick={() => setScreen('categorySelect')} variant="outline" className="w-full">📚 اختر تصنيف محدد</GlowButton>
       </div>
     </motion.div>
   );
 }
 
-// ===== Category Selection =====
-function CategorySelectScreen() {
-  const { setScreen, startGame } = useGameStore();
-  const categories = Object.entries(categoryInfo) as [QuestionCategory, typeof categoryInfo[QuestionCategory]][];
+// ===== Difficulty Selection =====
+function DifficultySelectScreen() {
+  const { setScreen, startGame, playerCoins, currentMode } = useGameStore();
+  const [selectedDifficulty, setSelectedDifficulty] = useState<GameDifficulty | null>(null);
+  const difficulties: GameDifficulty[] = ['easy', 'medium', 'hard', 'expert'];
+  const mode = currentMode || 'classic';
+
   return (
     <motion.div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 p-4" variants={pageVariants} initial="initial" animate="animate" exit="exit">
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-3 mb-4">
+        <motion.button whileTap={{ scale: 0.9 }} onClick={() => setScreen('modeSelect')} className="text-white/60 hover:text-white text-2xl">→</motion.button>
+        <h2 className="text-xl font-bold text-white">اختر مستوى الصعوبة</h2>
+      </div>
+      <div className="flex items-center gap-2 mb-4 bg-yellow-500/10 rounded-xl p-3 border border-yellow-500/20">
+        <span>🪙</span>
+        <span className="text-yellow-400 font-bold">{playerCoins} عملة</span>
+      </div>
+      <div className="space-y-3">
+        {difficulties.map((diff, i) => {
+          const config = DIFFICULTY_CONFIGS[diff];
+          const info = DIFFICULTY_INFO[diff];
+          const canAfford = playerCoins >= config.cost;
+          const isSelected = selectedDifficulty === diff;
+          return (
+            <motion.button key={diff} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }}
+              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} 
+              onClick={() => canAfford && setSelectedDifficulty(diff)}
+              disabled={!canAfford}
+              className={`w-full bg-gradient-to-r ${info.color} rounded-2xl p-4 text-right transition-all ${isSelected ? 'ring-2 ring-white/60 scale-[1.02]' : ''} ${!canAfford ? 'opacity-40 grayscale' : ''}`}>
+              <div className="flex items-center gap-4">
+                <span className="text-3xl">{info.icon}</span>
+                <div className="flex-1">
+                  <div className="text-white font-bold text-lg">{info.name}</div>
+                  <div className="text-white/70 text-sm">{info.desc}</div>
+                  <div className="flex items-center gap-3 mt-2 flex-wrap">
+                    <span className="bg-black/30 rounded-lg px-2 py-1 text-xs text-yellow-300">🪙 تكلفة: {config.cost}</span>
+                    <span className="bg-black/30 rounded-lg px-2 py-1 text-xs text-emerald-300">💰 مكافأة ×{config.rewardMultiplier}</span>
+                    <span className="bg-black/30 rounded-lg px-2 py-1 text-xs text-red-300">📉 خسارة: {config.lossPenalty}</span>
+                    <span className="bg-black/30 rounded-lg px-2 py-1 text-xs text-purple-300">💎 جواهر: {config.gemReward}</span>
+                  </div>
+                </div>
+              </div>
+            </motion.button>
+          );
+        })}
+      </div>
+      {selectedDifficulty && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mt-4">
+          <GlowButton onClick={() => startGame(mode, undefined, selectedDifficulty)} className="w-full text-lg py-4">
+            🎮 ابدأ اللعب! — 🪙 {DIFFICULTY_CONFIGS[selectedDifficulty].cost}
+          </GlowButton>
+        </motion.div>
+      )}
+    </motion.div>
+  );
+}
+
+// ===== Category Selection =====
+function CategorySelectScreen() {
+  const { setScreen, startGame, playerCoins } = useGameStore();
+  const [selectedCatDifficulty, setSelectedCatDifficulty] = useState<GameDifficulty>('easy');
+  const categories = Object.entries(categoryInfo) as [QuestionCategory, typeof categoryInfo[QuestionCategory]][];
+  const diffConfig = DIFFICULTY_CONFIGS[selectedCatDifficulty];
+  const canAfford = playerCoins >= diffConfig.cost;
+
+  return (
+    <motion.div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 p-4" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+      <div className="flex items-center gap-3 mb-4">
         <motion.button whileTap={{ scale: 0.9 }} onClick={() => setScreen('modeSelect')} className="text-white/60 hover:text-white text-2xl">→</motion.button>
         <h2 className="text-xl font-bold text-white">اختر التصنيف</h2>
+      </div>
+      <div className="flex items-center gap-2 mb-3 bg-yellow-500/10 rounded-xl p-3 border border-yellow-500/20">
+        <span>🪙</span><span className="text-yellow-400 font-bold">{playerCoins} عملة</span>
+      </div>
+      <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
+        {(['easy', 'medium', 'hard', 'expert'] as GameDifficulty[]).map(d => (
+          <button key={d} onClick={() => setSelectedCatDifficulty(d)}
+            className={`flex-shrink-0 rounded-lg px-3 py-2 text-xs font-bold transition-all ${selectedCatDifficulty === d ? 'bg-yellow-500/30 text-yellow-400 border border-yellow-500/50' : 'bg-white/5 text-white/40'}`}>
+            {DIFFICULTY_INFO[d].icon} {DIFFICULTY_INFO[d].name} ({DIFFICULTY_CONFIGS[d].cost}🪙)
+          </button>
+        ))}
       </div>
       <div className="grid grid-cols-2 gap-3">
         {categories.map(([key, info], i) => (
           <motion.button key={key} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.03 }}
-            whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => startGame('classic', key)}
-            className={`bg-gradient-to-br ${info.gradient} rounded-2xl p-4 text-center`}>
+            whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} 
+            onClick={() => canAfford && startGame('classic', key, selectedCatDifficulty)}
+            disabled={!canAfford}
+            className={`bg-gradient-to-br ${info.gradient} rounded-2xl p-4 text-center ${!canAfford ? 'opacity-40 grayscale' : ''}`}>
             <div className="text-3xl mb-1">{info.icon}</div>
             <div className="text-white font-bold text-xs">{info.name}</div>
           </motion.button>
@@ -417,8 +503,8 @@ function CategorySelectScreen() {
 function GameplayScreen() {
   const store = useGameStore();
   const { questions, currentQuestionIndex, score, timeRemaining, isTimerActive,
-    answeredCurrent, selectedAnswer, isCorrect, comboCount, currentMode,
-    powerUps, usedPowerUps } = store;
+    answeredCurrent, selectedAnswer, isCorrect, comboCount, currentMode, currentDifficulty,
+    powerUps, usedPowerUps, entryCost } = store;
   const question = questions[currentQuestionIndex];
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [showHint, setShowHint] = useState(false);
@@ -458,6 +544,7 @@ function GameplayScreen() {
   const timerColor = timeRemaining > 10 ? 'bg-emerald-500' : timeRemaining > 5 ? 'bg-yellow-500' : 'bg-red-500';
   const timerPercent = (timeRemaining / question.timeLimit) * 100;
   const modeNames: Record<string, string> = { classic: '🎯 الكلاسيكي', speed: '⚡ السرعة', survival: '🏕️ البقاء', marathon: '🏃 الماراثون', daily: '📅 اليومي', teamBattle: '⚔️ معركة الفرق' };
+  const diffNames: Record<string, string> = { easy: '🟢 سهل', medium: '🟡 متوسط', hard: '🔴 صعب', expert: '💎 خبير' };
   const isDoubled = usedPowerUps.includes('double_points');
 
   return (
@@ -465,6 +552,7 @@ function GameplayScreen() {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <span className="text-xs text-white/40 bg-white/5 px-2 py-1 rounded-lg">{modeNames[currentMode]}</span>
+          <span className="text-xs text-white/40 bg-white/5 px-2 py-1 rounded-lg">{diffNames[currentDifficulty]}</span>
           <span className="text-xs text-white/40">{currentQuestionIndex + 1}/{questions.length}</span>
         </div>
         <div className="flex items-center gap-3">
@@ -561,12 +649,16 @@ function GameplayScreen() {
 
 // ===== Results Screen =====
 function ResultsScreen() {
-  const { score, correctCount, questions, maxCombo, playerCoins, playerLevel, setScreen, resetGame, playerGems, adminSettings, updateUserCoins } = useGameStore();
+  const { score, correctCount, questions, maxCombo, playerCoins, playerLevel, setScreen, resetGame, playerGems, adminSettings, updateUserCoins, currentDifficulty, entryCost } = useGameStore();
   const totalQuestions = questions.length;
   const percentage = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
-  const coinsEarned = Math.round(score * 0.1) + correctCount * adminSettings.coinRewardPerGame;
-  const gemsEarned = correctCount === totalQuestions ? adminSettings.gemRewardPerfect : 0;
-  const xpEarned = Math.round(score * 0.5 * adminSettings.xpMultiplier);
+  const diffConfig = DIFFICULTY_CONFIGS[currentDifficulty];
+  const isWon = correctCount >= Math.ceil(totalQuestions * 0.6);
+  const baseCoinsEarned = Math.round(score * 0.1) + correctCount * adminSettings.coinRewardPerGame;
+  const coinsEarned = isWon ? Math.round(baseCoinsEarned * diffConfig.rewardMultiplier) : 0;
+  const lossPenalty = isWon ? 0 : diffConfig.lossPenalty;
+  const gemsEarned = correctCount === totalQuestions ? diffConfig.gemReward : (isWon ? Math.floor(diffConfig.gemReward / 2) : 0);
+  const xpEarned = Math.round(score * 0.5 * adminSettings.xpMultiplier * diffConfig.rewardMultiplier);
   const [showWatchAdBonus, setShowWatchAdBonus] = useState(false);
   const [watchingAd, setWatchingAd] = useState(false);
 
@@ -650,13 +742,32 @@ function ResultsScreen() {
         <StatBadge icon="🔥" value={maxCombo} label="أقصى كومبو" />
         <StatBadge icon="⭐" value={xpEarned} label="XP مكتسب" />
       </div>
-      <div className="bg-white/5 rounded-2xl p-4 mb-6 w-full max-w-sm">
-        <div className="text-white/40 text-xs text-center mb-3">المكافآت</div>
+      <div className="bg-white/5 rounded-2xl p-4 mb-4 w-full max-w-sm">
+        <div className="text-white/40 text-xs text-center mb-2">مستوى الصعوبة: {DIFFICULTY_INFO[currentDifficulty]?.icon} {DIFFICULTY_INFO[currentDifficulty]?.name}</div>
+        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-2 mb-3 text-center text-xs">
+          <span className="text-yellow-300">🪙 تكلفة الدخول: {entryCost}</span>
+        </div>
+        <div className="text-white/40 text-xs text-center mb-3">{isWon ? '🎉 المكافآت' : '😔 الخسارة'}</div>
         <div className="flex justify-around">
-          <div className="flex items-center gap-1"><span>🪙</span><span className="text-yellow-400 font-bold">+{coinsEarned}</span></div>
+          <div className="flex items-center gap-1">
+            <span>🪙</span>
+            <span className={isWon ? 'text-yellow-400 font-bold' : 'text-red-400 font-bold'}>
+              {isWon ? `+${coinsEarned}` : `-${lossPenalty}`}
+            </span>
+          </div>
           <div className="flex items-center gap-1"><span>💎</span><span className="text-purple-400 font-bold">+{gemsEarned}</span></div>
           <div className="flex items-center gap-1"><span>⬆️</span><span className="text-emerald-400 font-bold">+{xpEarned} XP</span></div>
         </div>
+        {!isWon && lossPenalty > 0 && (
+          <div className="mt-2 bg-red-500/10 border border-red-500/20 rounded-lg p-2 text-center">
+            <span className="text-red-400 text-xs">📉 تم خصم {lossPenalty} عملة بسبب الخسارة!</span>
+          </div>
+        )}
+        {isWon && diffConfig.rewardMultiplier > 1 && (
+          <div className="mt-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2 text-center">
+            <span className="text-emerald-400 text-xs">💰 مكافأة مضاعفة ×{diffConfig.rewardMultiplier}!</span>
+          </div>
+        )}
       </div>
       {/* Watch Ad for Bonus */}
       {!showWatchAdBonus && (
@@ -1018,13 +1129,22 @@ function DailyChallengeScreen() {
 
 // ===== Spin Wheel =====
 function SpinWheelScreen() {
-  const { setScreen, playerCoins, updateUserCoins } = useGameStore();
+  const { setScreen, playerCoins, updateUserCoins, updateUserGems } = useGameStore();
   const [spinning, setSpinning] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [rotation, setRotation] = useState(0);
+  const [notEnoughCoins, setNotEnoughCoins] = useState(false);
   const prizes = ['🪙 +50', '💎 +3', '🪙 +100', '🎁 مفاجأة', '🪙 +25', '💎 +1', '🪙 +75', '⭐ ×2'];
   const spin = () => {
     if (spinning) return;
+    if (playerCoins < SPIN_WHEEL_COST) {
+      setNotEnoughCoins(true);
+      setTimeout(() => setNotEnoughCoins(false), 3000);
+      return;
+    }
+    // Deduct 50 coins first
+    useGameStore.setState({ playerCoins: playerCoins - SPIN_WHEEL_COST });
+    useWalletStore.getState().addTransaction({ type: 'spend', amount: SPIN_WHEEL_COST, currency: 'coins', description: 'تدوير عجلة الحظ' });
     setSpinning(true);
     setResult(null);
     const newRotation = rotation + 1440 + Math.random() * 720;
@@ -1032,8 +1152,25 @@ function SpinWheelScreen() {
     setTimeout(() => {
       const idx = Math.floor(Math.random() * prizes.length);
       setResult(prizes[idx]);
-      if (idx === 0 || idx === 2 || idx === 4 || idx === 6) updateUserCoins([50, 100, 25, 75][[0, 2, 4, 6].indexOf(idx)]);
-      if (idx === 1 || idx === 5) useGameStore.getState().updateUserGems([3, 1][[1, 5].indexOf(idx)]);
+      if (idx === 0 || idx === 2 || idx === 4 || idx === 6) {
+        const coinAmount = [50, 100, 25, 75][[0, 2, 4, 6].indexOf(idx)];
+        updateUserCoins(coinAmount);
+        useWalletStore.getState().addTransaction({ type: 'reward', amount: coinAmount, currency: 'coins', description: 'جائزة عجلة الحظ' });
+      }
+      if (idx === 1 || idx === 5) {
+        const gemAmount = [3, 1][[1, 5].indexOf(idx)];
+        useGameStore.getState().updateUserGems(gemAmount);
+      }
+      if (idx === 3) {
+        // Surprise: random big reward
+        const surprise = Math.random() > 0.5 ? 200 : 5;
+        if (surprise > 10) {
+          updateUserCoins(surprise);
+          useWalletStore.getState().addTransaction({ type: 'reward', amount: surprise, currency: 'coins', description: 'مفاجأة عجلة الحظ!' });
+        } else {
+          useGameStore.getState().updateUserGems(surprise);
+        }
+      }
       setSpinning(false);
     }, 3000);
   };
@@ -1042,7 +1179,12 @@ function SpinWheelScreen() {
       <div className="flex items-center gap-3 mb-6 absolute top-4 right-4">
         <motion.button whileTap={{ scale: 0.9 }} onClick={() => setScreen('menu')} className="text-white/60 hover:text-white text-2xl">→</motion.button>
       </div>
-      <h2 className="text-2xl font-extrabold text-white mb-8">🎰 عجلة الحظ</h2>
+      <h2 className="text-2xl font-extrabold text-white mb-2">🎰 عجلة الحظ</h2>
+      <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl px-4 py-2 mb-6 flex items-center gap-2">
+        <span>🪙</span>
+        <span className="text-yellow-400 font-bold">{playerCoins} عملة</span>
+        <span className="text-white/40 text-xs">| التكلفة: {SPIN_WHEEL_COST} 🪙</span>
+      </div>
       <div className="relative w-64 h-64 mb-8">
         <div className="absolute inset-0 flex items-center justify-center text-4xl z-10">🎰</div>
         <motion.div animate={{ rotate: rotation }} transition={{ duration: 3, ease: 'easeOut' }}
@@ -1055,13 +1197,19 @@ function SpinWheelScreen() {
           ))}
         </motion.div>
       </div>
+      {notEnoughCoins && (
+        <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+          className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 mb-4 text-center">
+          <span className="text-red-400 font-bold text-sm">🚫 لا تملك عملات كافية! تحتاج {SPIN_WHEEL_COST} 🪙</span>
+        </motion.div>
+      )}
       {result && (
         <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 mb-4 text-center">
           <span className="text-yellow-400 font-bold text-lg">فزت: {result}!</span>
         </motion.div>
       )}
-      <GlowButton onClick={spin} disabled={spinning} className="text-lg px-12 py-4">
-        {spinning ? '🎡 جارٍ الدوران...' : '🎰 أدر العجلة!'}
+      <GlowButton onClick={spin} disabled={spinning || playerCoins < SPIN_WHEEL_COST} className="text-lg px-12 py-4">
+        {spinning ? '🎡 جارٍ الدوران...' : `🎰 أدر العجلة! (${SPIN_WHEEL_COST} 🪙)`}
       </GlowButton>
     </motion.div>
   );
@@ -3184,6 +3332,7 @@ export default function Home() {
       case 'login': return <LoginScreen />;
       case 'menu': return <MainMenu />;
       case 'modeSelect': return <ModeSelectScreen />;
+      case 'difficultySelect': return <DifficultySelectScreen />;
       case 'categorySelect': return <CategorySelectScreen />;
       case 'gameplay': return <GameplayScreen />;
       case 'results': return <ResultsScreen />;
